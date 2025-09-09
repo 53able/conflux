@@ -1,6 +1,6 @@
 {
   "name": "@53able/conflux",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Multi-agent thinking methodology MCP tools for strategic analysis and decision-making",
   "type": "module",
   "exports": {
@@ -23,7 +23,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/cli/index.js dist/mcp/server.js",
     "dev": "tsx --watch src/cli/index.ts",
     "start": "tsx src/cli/index.ts",
     "mcp-server": "tsx src/mcp/server.ts",
