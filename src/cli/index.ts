@@ -9,6 +9,7 @@ import {
   ThinkingMethodType, 
   DevelopmentPhase 
 } from '../schemas/thinking.js';
+import { ThinkingMethodsMCPServer } from '../mcp/server.js';
 
 /**
  * 簡易CLIアプリケーションクラス
@@ -49,6 +50,10 @@ class ThinkingCLI {
           break;
         case 'recommend':
           await this.handleRecommendCommand(args);
+          break;
+        case 'server':
+        case 'mcp':
+          await this.handleServerCommand();
           break;
         case '--help':
         case '-h':
@@ -260,6 +265,23 @@ class ThinkingCLI {
   }
 
   /**
+   * MCPサーバーコマンドを処理
+   */
+  private async handleServerCommand(): Promise<void> {
+    try {
+      console.log(chalk.cyan('🚀 Starting MCP Server...'));
+      const server = new ThinkingMethodsMCPServer();
+      await server.start();
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to start MCP server:'));
+      if (error instanceof Error) {
+        console.error(chalk.red(error.message));
+      }
+      process.exit(1);
+    }
+  }
+
+  /**
    * 使用方法表示
    */
   private printUsage(): void {
@@ -274,6 +296,7 @@ class ThinkingCLI {
     console.log('  single <METHOD> <INPUT>   単一思考法実行');
     console.log('  list                      利用可能な思考法一覧');
     console.log('  recommend <PHASE>         局面別推奨思考法');
+    console.log('  server                    MCPサーバーを起動');
     console.log('  help                      このヘルプを表示');
     console.log('  version                   バージョン情報を表示');
     console.log('');
@@ -289,9 +312,9 @@ class ThinkingCLI {
   private printVersion(): void {
     try {
       const packageJson = JSON.parse(readFileSync('package.json', 'utf-8'));
-      console.log(`CONFLUX Thinking Agents MCP v${packageJson.version || '0.1.0'}`);
+      console.log(`CONFLUX Thinking Agents MCP v${packageJson.version || '0.1.6'}`);
     } catch {
-      console.log('CONFLUX Thinking Agents MCP v0.1.0');
+      console.log('CONFLUX Thinking Agents MCP v0.1.6');
     }
   }
 
@@ -431,7 +454,5 @@ async function main() {
   await cli.execute();
 }
 
-// スクリプトとして実行された場合のみmainを実行
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch(console.error);
-}
+// メイン実行（npxでも確実に動作するように）
+main().catch(console.error);

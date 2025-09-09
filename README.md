@@ -171,19 +171,25 @@ const result = await orchestrator.processSingleMethod(
 
 ```bash
 # 局面別思考プロセス
-thinking-agents phase debugging '{"issue": "APIエラー", "context": "DB問題"}'
+npx @53able/conflux phase debugging '{"issue": "APIエラー", "context": "DB問題"}'
 
 # 黄金パターン実行
-thinking-agents golden '{"problem": "アーキテクチャ設計"}'
+npx @53able/conflux golden '{"problem": "アーキテクチャ設計"}'
 
 # 単一思考法
-thinking-agents single critical '{"claim": "この実装で十分"}'
+npx @53able/conflux single critical '{"claim": "この実装で十分"}'
 
 # 思考法一覧
-thinking-agents list --detail
+npx @53able/conflux list
 
 # 局面別推奨思考法
-thinking-agents recommend debugging
+npx @53able/conflux recommend debugging
+
+# バージョン確認
+npx @53able/conflux version
+
+# ヘルプ表示
+npx @53able/conflux --help
 ```
 
 ## 🛠 MCPサーバーとして使用
@@ -193,10 +199,13 @@ Model Context Protocol準拠のサーバーとして他のAIツールと統合�
 ### サーバー起動
 
 ```bash
-# MCPサーバーモードで起動
+# npx経由で起動（推奨）
+npx @53able/conflux server
+
+# 開発時：npm scriptsで起動
 npm run mcp-server
 
-# またはtsxで直接実行
+# 開発時：tsxで直接実行
 npx tsx src/mcp/server.ts
 ```
 
@@ -207,7 +216,7 @@ npx tsx src/mcp/server.ts
   "mcpServers": {
     "thinking-agents": {
       "command": "npx",
-      "args": ["@53able/conflux", "mcp-server"],
+      "args": ["@53able/conflux", "server"],
       "env": {
         "OPENAI_API_KEY": "your-api-key",
         "ANTHROPIC_API_KEY": "your-anthropic-key"
@@ -227,7 +236,7 @@ npx tsx src/mcp/server.ts
   "mcp.servers": {
     "thinking-agents": {
       "command": "npx",
-      "args": ["@53able/conflux", "mcp-server"],
+      "args": ["@53able/conflux", "server"],
       "env": {
         "OPENAI_API_KEY": "your-api-key",
         "ANTHROPIC_API_KEY": "your-anthropic-key"
@@ -243,7 +252,7 @@ npx tsx src/mcp/server.ts
   "mcp.servers": {
     "thinking-agents": {
       "command": "pnpm",
-      "args": ["dlx", "@53able/conflux", "mcp-server"],
+      "args": ["dlx", "@53able/conflux", "server"],
       "env": {
         "OPENAI_API_KEY": "your-api-key",
         "ANTHROPIC_API_KEY": "your-anthropic-key"
@@ -271,6 +280,8 @@ pnpm run dev
 
 # MCPサーバーとして起動
 pnpm run mcp-server
+# または
+npx @53able/conflux server
 ```
 
 ### 利用可能なMCPツール
