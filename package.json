@@ -1,6 +1,6 @@
 {
   "name": "@53able/conflux",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Multi-agent thinking methodology MCP tools for strategic analysis and decision-making",
   "type": "module",
   "exports": {
@@ -14,7 +14,8 @@
     }
   },
   "bin": {
-    "thinking-agents": "./dist/cli/index.js"
+    "thinking-agents": "./dist/cli/index.js",
+    "mcp-server": "./dist/mcp/server.js"
   },
   "files": [
     "dist/",
