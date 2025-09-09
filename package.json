@@ -1,5 +1,5 @@
 {
-  "name": "conflux-thinking-agents-mcp",
+  "name": "@53able/conflux",
   "version": "0.1.0",
   "description": "Multi-agent thinking methodology MCP tools for strategic analysis and decision-making",
   "type": "module",
