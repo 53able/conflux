@@ -1,5 +1,5 @@
 {
-  "name": "@conflux/thinking-agents-mcp",
+  "name": "conflux-thinking-agents-mcp",
   "version": "0.1.0",
   "description": "Multi-agent thinking methodology MCP tools for strategic analysis and decision-making",
   "type": "module",
@@ -74,6 +74,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/conflux/thinking-agents-mcp.git"
+    "url": "https://github.com/53able/conflux.git"
   }
 }
