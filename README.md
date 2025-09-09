@@ -39,9 +39,9 @@
 ### インストール
 
 ```bash
-pnpm install @conflux/thinking-agents-mcp
+pnpm install @53able/conflux
 # or
-npm install @conflux/thinking-agents-mcp
+npm install @53able/conflux
 ```
 
 > **推奨**: このプロジェクトは`pnpm`での使用を推奨しています。
@@ -121,7 +121,7 @@ pnpm start single abduction '{"surprisingFact": "APIが遅い"}'
 #### 1. 局面別思考プロセス
 
 ```typescript
-import { ThinkingOrchestrator } from '@conflux/thinking-agents-mcp';
+import { ThinkingOrchestrator } from '@53able/conflux';
 
 const orchestrator = new ThinkingOrchestrator();
 
@@ -207,7 +207,7 @@ npx tsx src/mcp/server.ts
   "mcpServers": {
     "thinking-agents": {
       "command": "npx",
-      "args": ["@conflux/thinking-agents-mcp", "mcp-server"],
+      "args": ["@53able/conflux", "mcp-server"],
       "env": {
         "OPENAI_API_KEY": "your-api-key",
         "ANTHROPIC_API_KEY": "your-anthropic-key"
@@ -220,14 +220,33 @@ npx tsx src/mcp/server.ts
 ### Cursor / Claude Codeでの使用
 
 #### Cursor設定
+
+**方法1: npx経由でnpmレジストリから実行（推奨）**
+```json
+{
+  "mcp.servers": {
+    "thinking-agents": {
+      "command": "npx",
+      "args": ["@53able/conflux", "mcp-server"],
+      "env": {
+        "OPENAI_API_KEY": "your-api-key",
+        "ANTHROPIC_API_KEY": "your-anthropic-key"
+      }
+    }
+  }
+}
+```
+
+**方法2: pnpm dlx経由**
 ```json
 {
   "mcp.servers": {
     "thinking-agents": {
       "command": "pnpm",
-      "args": ["dlx", "@conflux/thinking-agents-mcp", "mcp-server"],
+      "args": ["dlx", "@53able/conflux", "mcp-server"],
       "env": {
-        "OPENAI_API_KEY": "your-api-key"
+        "OPENAI_API_KEY": "your-api-key",
+        "ANTHROPIC_API_KEY": "your-anthropic-key"
       }
     }
   }
@@ -238,8 +257,8 @@ npx tsx src/mcp/server.ts
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/conflux/thinking-agents-mcp.git
-cd thinking-agents-mcp
+git clone https://github.com/53able/conflux.git
+cd conflux
 
 # 依存関係のインストール（pnpm推奨）
 pnpm install
@@ -301,7 +320,7 @@ CUSTOM_LLM_API_KEY=your-custom-key
 ### LLMプロバイダー設定
 
 ```typescript
-import { globalLLMManager } from '@conflux/thinking-agents-mcp';
+import { globalLLMManager } from '@53able/conflux';
 
 // OpenAI GPT-4
 globalLLMManager.registerProvider('gpt4', {
@@ -331,7 +350,7 @@ globalLLMManager.registerProvider('custom', {
 ### カスタム思考法エージェント
 
 ```typescript
-import { BaseThinkingAgent, AgentCapability } from '@conflux/thinking-agents-mcp';
+import { BaseThinkingAgent, AgentCapability } from '@53able/conflux';
 
 class CustomThinkingAgent extends BaseThinkingAgent {
   readonly capability: AgentCapability = {
