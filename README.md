@@ -12,7 +12,7 @@
 
 - **🎯 局面特化**: 開発の15の局面それぞれに最適化された思考法の組み合わせ
 - **🤖 マルチエージェント**: 9つの専門思考法エージェントが連携して動作
-- **📊 型安全**: Zodスキーマベースの完全な型安全性
+- **📊 型安全**: Zodスキーマベースの完全な型安全性（any型完全禁止）
 - **🌐 MCP準拠**: Model Context Protocolで他のAIツールと統合可能
 - **⚡ 高性能**: TypeScript + tsx による高速実行
 - **🎨 美しいCLI**: Commander.jsベースの直感的なコマンドライン
@@ -373,6 +373,12 @@ pnpm install
 # ビルド
 pnpm run build
 
+# 型チェック（any型完全禁止）
+pnpm run type-check
+
+# Lintチェック（ESLint v9）
+pnpm run lint
+
 # MCPサーバーとして起動
 pnpm run mcp-server
 # または
@@ -380,6 +386,37 @@ npx @53able/conflux server
 
 # CLIツールとして使用
 npx @53able/conflux list
+```
+
+### コード品質と型安全性
+
+このプロジェクトは最高レベルの型安全性とコード品質を実現しています：
+
+#### 型安全性
+- **TypeScript厳密モード**: `strict: true`で完全な型チェック
+- **any型完全禁止**: ESLintで`@typescript-eslint/no-explicit-any: error`
+- **Zodスキーマ**: 実行時型検証とコンパイル時型安全性の両立
+- **AI SDK v5統合**: 複雑な型定義に対応した適切な型アサーション
+
+#### コード品質
+- **ESLint v9**: 最新のESLint設定でコード品質を保証
+- **未使用変数検出**: `@typescript-eslint/no-unused-vars`で未使用コードを排除
+- **一貫した命名**: 未使用パラメータは`_`プレフィックスで統一
+- **自動フォーマット**: 一貫したコードスタイルを維持
+
+#### 開発コマンド
+```bash
+# 型チェック（エラー0個を保証）
+pnpm run type-check
+
+# Lintチェック（エラー0個、警告0個を保証）
+pnpm run lint
+
+# ビルド（型チェック + コンパイル）
+pnpm run build
+
+# 開発モード（ファイル監視）
+pnpm run dev
 ```
 
 ## 📋 開発局面と推奨思考法
