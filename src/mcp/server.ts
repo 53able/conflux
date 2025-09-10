@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -66,7 +67,7 @@ export class ThinkingMethodsMCPServer {
     this.server = new Server(
       {
         name: 'thinking-methods-mcp',
-        version: '0.1.0',
+        version: this.getVersion(),
       },
       {
         capabilities: {
@@ -473,6 +474,18 @@ export class ThinkingMethodsMCPServer {
         },
       ],
     };
+  }
+
+  /**
+   * バージョン情報取得
+   */
+  private getVersion(): string {
+    try {
+      const packageJson = JSON.parse(readFileSync('package.json', 'utf-8'));
+      return packageJson.version || '0.1.7';
+    } catch {
+      return '0.1.7';
+    }
   }
 
   /**

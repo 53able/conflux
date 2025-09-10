@@ -23,18 +23,15 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.17.5
-      '@optique/core':
-        specifier: ^0.4.0
-        version: 0.4.2
-      '@optique/run':
-        specifier: ^0.4.0
-        version: 0.4.2
       ai:
         specifier: ^5.0.0
         version: 5.0.39(zod@4.1.5)
       chalk:
         specifier: ^5.3.0
         version: 5.6.2
+      commander:
+        specifier: ^14.0.0
+        version: 14.0.0
       dotenv:
         specifier: ^17.2.2
         version: 17.2.2
@@ -474,14 +471,6 @@ packages:
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
     engines: {node: '>=8.0.0'}
 
-  '@optique/core@0.4.2':
-    resolution: {integrity: sha512-ZTS+jTsw8fQuHaCZAOeWZuHxn/L/fcxFV6Hzs02fItn4v53MqxdZgvY0Fa/KYDmvE4ZzCm9Lm93bf5tVT32U9Q==}
-    engines: {bun: '>=1.2.0', deno: '>=2.3.0', node: '>=20.0.0'}
-
-  '@optique/run@0.4.2':
-    resolution: {integrity: sha512-QJUczNryFFnNjTOk8BbkYF53APD4FTrOnKg04M2erKyAsV+rBasXLca6bTT1w1B8DSAlWeSZK62XRedEHWecbA==}
-    engines: {bun: '>=1.2.0', deno: '>=2.3.0', node: '>=20.0.0'}
-
   '@rollup/rollup-android-arm-eabi@4.50.1':
     resolution: {integrity: sha512-HJXwzoZN4eYTdD8bVV22DN8gsPCAj3V20NHKOs8ezfXanGpmVPR7kalUHd+Y31IJp9stdB87VKPFbsGY3H/2ag==}
     cpu: [arm]
@@ -798,6 +787,10 @@ packages:
 
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
+
+  commander@14.0.0:
+    resolution: {integrity: sha512-2uM9rYjPvyq39NwLRqaiLtWHyDC1FvryJDa2ATTVims5YAS4PupsEQsDvP14FqhFr0P49CYDugi59xaxJlTXRA==}
+    engines: {node: '>=20'}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -1903,12 +1896,6 @@ snapshots:
 
   '@opentelemetry/api@1.9.0': {}
 
-  '@optique/core@0.4.2': {}
-
-  '@optique/run@0.4.2':
-    dependencies:
-      '@optique/core': 0.4.2
-
   '@rollup/rollup-android-arm-eabi@4.50.1':
     optional: true
 
@@ -2232,6 +2219,8 @@ snapshots:
       color-name: 1.1.4
 
   color-name@1.1.4: {}
+
+  commander@14.0.0: {}
 
   concat-map@0.0.1: {}
 

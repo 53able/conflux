@@ -223,7 +223,7 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
       }
 
       const result = await generateObject({
-        model,
+        model: model as any, // AI SDK v5の型互換性問題を回避
         schema,
         system: systemPrompt,
         prompt: userPrompt,

@@ -4,9 +4,7 @@ import { readFileSync } from 'fs';
 import chalk from 'chalk';
 import ora from 'ora';
 
-import { object, or, command, argument } from '@optique/core/parser';
-import { string } from '@optique/core/valueparser';
-import { run } from '@optique/run';
+import { Command } from 'commander';
 
 import { ThinkingOrchestrator } from '../orchestrator/thinking-orchestrator.js';
 import { 
@@ -15,33 +13,8 @@ import {
 } from '../schemas/thinking.js';
 import { ThinkingMethodsMCPServer } from '../mcp/server.js';
 
-// シンプルなコマンド型定義（実用優先版）
-type PhaseCommandResult = {
-  readonly phase: string;
-  readonly input: string;
-};
-
-type GoldenCommandResult = {
-  readonly input: string;
-};
-
-type SingleCommandResult = {
-  readonly method: string;
-  readonly input: string;
-};
-
-type RecommendCommandResult = {
-  readonly phase: string;
-};
-
-type ListCommandResult = {};
-type ServerCommandResult = {};
-
-// Optiqueが実際に返すデータ構造
-type CLICommand = PhaseCommandResult | GoldenCommandResult | SingleCommandResult | RecommendCommandResult | ListCommandResult | ServerCommandResult;
-
 /**
- * 簡易CLIアプリケーションクラス
+ * Commander.jsベースのCLIアプリケーションクラス
  */
 class ThinkingCLI {
   private orchestrator: ThinkingOrchestrator;
@@ -51,147 +24,95 @@ class ThinkingCLI {
   }
 
   /**
-   * 型安全なCLIパーサーの定義（実用優先版）
-   */
-  private createParser() {
-    // 各サブコマンドのパーサー（位置引数使用）
-    const phaseParser = object({
-      phase: argument(string()),
-      input: argument(string()),
-    });
-
-    const goldenParser = object({
-      input: argument(string()),
-    });
-
-    const singleParser = object({
-      method: argument(string()),
-      input: argument(string()),
-    });
-
-    const listParser = object({});
-
-    const recommendParser = object({
-      phase: argument(string()),
-    });
-
-    const serverParser = object({});
-
-    // サブコマンド定義（シンプル構造）
-    return or(
-      command('phase', phaseParser),
-      command('golden', goldenParser),
-      command('single', singleParser),
-      command('list', listParser),
-      command('recommend', recommendParser),
-      command('server', serverParser),
-      command('mcp', serverParser)
-    );
-  }
-
-  /**
-   * メイン実行関数（Optiqueベース）
+   * Commander.jsベースのメイン実行関数
    */
   async execute(): Promise<void> {
-    try {
-      const parser = this.createParser();
-      const config = run(parser);
+    const program = new Command();
 
-      // コマンド別の処理
-      await this.handleCommand(config);
+    program
+      .name('conflux')
+      .description('CONFLUX 思考法ツール - 構造化された思考プロセスを支援')
+      .version(this.getVersion());
 
-    } catch (error) {
-      this.handleError(error, false);
-    }
+    // 共通オプション
+    program.option('-v, --verbose', '詳細な出力を表示');
+
+    // phase コマンド
+    program
+      .command('phase <phase> <input>')
+      .description('局面別思考プロセス実行')
+      .action(async (phase: string, input: string, options: any) => {
+        await this.handlePhaseCommand({ phase, input, verbose: options.verbose });
+      });
+
+    // golden コマンド
+    program
+      .command('golden <input>')
+      .description('黄金パターン実行')
+      .action(async (input: string, options: any) => {
+        await this.handleGoldenCommand({ input, verbose: options.verbose });
+      });
+
+    // single コマンド
+    program
+      .command('single <method> <input>')
+      .description('単一思考法実行')
+      .action(async (method: string, input: string, options: any) => {
+        await this.handleSingleCommand({ method, input, verbose: options.verbose });
+      });
+
+    // list コマンド
+    program
+      .command('list')
+      .description('利用可能な思考法一覧')
+      .action(async (options: any) => {
+        await this.handleListCommand({ verbose: options.verbose });
+      });
+
+    // recommend コマンド
+    program
+      .command('recommend <phase>')
+      .description('局面別推奨思考法')
+      .action(async (phase: string, options: any) => {
+        await this.handleRecommendCommand({ phase, verbose: options.verbose });
+      });
+
+    // server コマンド
+    program
+      .command('server')
+      .description('MCPサーバーを起動')
+      .action(async (options: any) => {
+        await this.handleServerCommand({ verbose: options.verbose });
+      });
+
+    // mcp コマンド（serverと同じ）
+    program
+      .command('mcp')
+      .description('MCPサーバーを起動（serverと同じ）')
+      .action(async (options: any) => {
+        await this.handleServerCommand({ verbose: options.verbose });
+      });
+
+    // パース実行
+    await program.parseAsync();
   }
 
-  /**
-   * 型安全なコマンド処理
-   */
-  private async handleCommand(config: CLICommand): Promise<void> {
-    try {
-      // コマンドを判定してディスパッチ
-      if (this.isPhaseCommand(config)) {
-        await this.handlePhaseCommandTyped(config);
-      } else if (this.isGoldenCommand(config)) {
-        await this.handleGoldenCommandTyped(config);
-      } else if (this.isSingleCommand(config)) {
-        await this.handleSingleCommandTyped(config);
-      } else if (this.isRecommendCommand(config)) {
-        await this.handleRecommendCommandTyped(config);
-      } else if (this.isListCommand(config)) {
-        await this.handleListCommand();
-      } else {
-        await this.handleServerCommand();
-      }
-    } catch (error) {
-      this.handleError(error, false);
-    }
-  }
-
-  /**
-   * 型ガード関数群（シンプル版）
-   */
-  private isPhaseCommand(config: CLICommand): config is PhaseCommandResult {
-    return 'phase' in config && 'input' in config;
-  }
-
-  private isGoldenCommand(config: CLICommand): config is GoldenCommandResult {
-    return 'input' in config && !('phase' in config) && !('method' in config);
-  }
-
-  private isSingleCommand(config: CLICommand): config is SingleCommandResult {
-    return 'method' in config && 'input' in config;
-  }
-
-  private isRecommendCommand(config: CLICommand): config is RecommendCommandResult {
-    return 'phase' in config && !('input' in config);
-  }
-
-  private isListCommand(config: CLICommand): config is ListCommandResult {
-    return !('phase' in config) && !('input' in config) && !('method' in config);
-  }
-
-  /**
-   * バージョン情報取得
-   */
-  private getVersion(): string {
-    try {
-      const packageJson = JSON.parse(readFileSync('package.json', 'utf-8'));
-      return `CONFLUX Thinking Agents MCP v${packageJson.version || '0.1.6'}`;
-    } catch {
-      return 'CONFLUX Thinking Agents MCP v0.1.6';
-    }
-  }
-
-  /**
-   * 型安全な局面別思考プロセス実行（拡張版）
-   */
-  private async handlePhaseCommandTyped(config: PhaseCommandResult): Promise<void> {
+  // コマンドハンドラーの型定義
+  private async handlePhaseCommand(config: { phase: string; input: string; verbose?: boolean }): Promise<void> {
     const spinner = ora('思考プロセスを実行中...').start();
     
     try {
-      // 局面の妥当性チェック
       if (!this.isValidPhase(config.phase)) {
-        spinner.fail(`無効な局面が指定されました: ${config.phase}`);
+        spinner.fail('無効な局面が指定されました');
         this.printValidPhases();
         return;
       }
 
-      // 入力データのバリデーション
-      const validation = this.validateInputData(config.input, '局面別思考プロセス');
-      if (!validation.isValid) {
-        spinner.fail(`入力データエラー: ${validation.error}`);
-        console.log(chalk.yellow('正しい形式例: \'{"issue":"問題の説明","context":"追加の背景情報"}\''));
-        return;
-      }
-
-      // デバッグ情報表示
-      console.log(chalk.gray(`実行局面: ${config.phase}`));
-
+      const inputData = this.parseInputData(config.input);
+      
       const result = await this.orchestrator.processPhase(
         config.phase as DevelopmentPhase,
-        validation.data!,
+        inputData,
         {
           llmProvider: 'default',
           sessionId: `cli-${Date.now()}`,
@@ -199,7 +120,7 @@ class ThinkingCLI {
       );
 
       spinner.succeed('思考プロセス完了');
-      this.displayResult(result, false);
+      this.displayResult(result, config.verbose || false);
       
     } catch (error) {
       spinner.fail('思考プロセスでエラーが発生しました');
@@ -207,10 +128,7 @@ class ThinkingCLI {
     }
   }
 
-  /**
-   * 型安全な黄金パターン実行
-   */
-  private async handleGoldenCommandTyped(config: GoldenCommandResult): Promise<void> {
+  private async handleGoldenCommand(config: { input: string; verbose?: boolean }): Promise<void> {
     const spinner = ora('黄金パターン（探索→実装）を実行中...').start();
     
     try {
@@ -225,7 +143,7 @@ class ThinkingCLI {
       );
 
       spinner.succeed('黄金パターン完了');
-      this.displayResult(result, false);
+      this.displayResult(result, config.verbose || false);
       
     } catch (error) {
       spinner.fail('黄金パターンでエラーが発生しました');
@@ -233,34 +151,21 @@ class ThinkingCLI {
     }
   }
 
-  /**
-   * 型安全な単一思考法実行（拡張版）
-   */
-  private async handleSingleCommandTyped(config: SingleCommandResult): Promise<void> {
+  private async handleSingleCommand(config: { method: string; input: string; verbose?: boolean }): Promise<void> {
     const spinner = ora(`${config.method}思考を実行中...`).start();
     
     try {
-      // 思考法の妥当性チェック
       if (!this.isValidMethod(config.method)) {
-        spinner.fail(`無効な思考法が指定されました: ${config.method}`);
+        spinner.fail('無効な思考法が指定されました');
         this.printValidMethods();
         return;
       }
 
-      // 入力データのバリデーション
-      const validation = this.validateInputData(config.input, '単一思考法');
-      if (!validation.isValid) {
-        spinner.fail(`入力データエラー: ${validation.error}`);
-        console.log(chalk.yellow('正しい形式例: \'{"claim":"検証したい主張","evidence":"根拠となる情報"}\''));
-        return;
-      }
-
-      // デバッグ情報表示
-      console.log(chalk.gray(`実行思考法: ${config.method}`));
-
+      const inputData = this.parseInputData(config.input);
+      
       const result = await this.orchestrator.processSingleMethod(
         config.method as ThinkingMethodType,
-        validation.data!,
+        inputData,
         {
           llmProvider: 'default',
           sessionId: `single-${Date.now()}`,
@@ -268,7 +173,7 @@ class ThinkingCLI {
       );
 
       spinner.succeed(`${config.method}思考完了`);
-      this.displaySingleResult(result, false);
+      this.displaySingleResult(result, config.verbose || false);
       
     } catch (error) {
       spinner.fail(`${config.method}思考でエラーが発生しました`);
@@ -276,57 +181,7 @@ class ThinkingCLI {
     }
   }
 
-  /**
-   * 型安全な推奨思考法表示
-   */
-  private async handleRecommendCommandTyped(config: RecommendCommandResult): Promise<void> {
-    if (!this.isValidPhase(config.phase)) {
-      console.error(chalk.red('無効な局面が指定されました'));
-      this.printValidPhases();
-      return;
-    }
-
-    const recommendations: Record<string, { primary: string; secondary: string[]; purpose: string }> = {
-      business_exploration: { 
-        primary: 'abduction', 
-        secondary: ['inductive', 'deductive', 'meta'],
-        purpose: '驚きから仮説形成' 
-      },
-      requirement_definition: { 
-        primary: 'logical', 
-        secondary: ['mece', 'critical'],
-        purpose: '論点→結論の道筋を作る' 
-      },
-      debugging: { 
-        primary: 'abduction', 
-        secondary: ['deductive', 'inductive'],
-        purpose: '兆候→最尤原因仮説' 
-      },
-      refactoring: { 
-        primary: 'critical', 
-        secondary: ['mece', 'logical'],
-        purpose: '"本当に必要？"を疑う' 
-      },
-    };
-
-    const rec = recommendations[config.phase];
-    if (!rec) {
-      console.log(chalk.yellow('この局面の推奨情報は準備中です'));
-      return;
-    }
-
-    console.log(chalk.blue.bold(`局面: ${config.phase}`));
-    console.log(chalk.gray(`目的: ${rec.purpose}`));
-    console.log('');
-    console.log(chalk.green(`主要思考法: ${rec.primary}`));
-    console.log(`併用推奨: ${rec.secondary.join(', ')}`);
-  }
-
-
-  /**
-   * 思考法一覧表示
-   */
-  private async handleListCommand(): Promise<void> {
+  private async handleListCommand(config: { verbose?: boolean }): Promise<void> {
     const methods = [
       { name: 'abduction', description: '驚きの事実から説明仮説を形成' },
       { name: 'logical', description: '論点から結論への論理的道筋を構築' },
@@ -347,11 +202,55 @@ class ThinkingCLI {
     });
   }
 
+  private async handleRecommendCommand(config: { phase: string; verbose?: boolean }): Promise<void> {
+    if (!this.isValidPhase(config.phase)) {
+      console.error(chalk.red('無効な局面が指定されました'));
+      this.printValidPhases();
+      return;
+    }
 
-  /**
-   * MCPサーバーコマンドを処理
-   */
-  private async handleServerCommand(): Promise<void> {
+    const recommendations: Record<string, { purpose: string; primary: string; secondary: string[] }> = {
+      business_exploration: {
+        purpose: '事業・課題の探索と仮説形成',
+        primary: 'アブダクション',
+        secondary: ['帰納', '演繹', 'メタ'],
+      },
+      requirement_definition: {
+        purpose: '要件の論理的な整理と構造化',
+        primary: 'ロジカルシンキング',
+        secondary: ['MECE', 'クリティカル'],
+      },
+      debugging: {
+        purpose: '問題の原因特定と解決策の探索',
+        primary: 'アブダクション',
+        secondary: ['演繹', '帰納'],
+      },
+      refactoring: {
+        purpose: 'コードの改善と構造の最適化',
+        primary: 'クリティカルシンキング',
+        secondary: ['MECE', 'ロジカル'],
+      },
+      decision_making: {
+        purpose: '重要な意思決定の支援',
+        primary: 'ディベート思考',
+        secondary: ['メタ'],
+      },
+    };
+
+    const rec = recommendations[config.phase];
+    if (!rec) {
+      console.log(chalk.yellow('この局面の推奨情報は準備中です'));
+      return;
+    }
+
+    console.log(chalk.blue.bold(`局面: ${config.phase}`));
+    console.log(chalk.gray(`目的: ${rec.purpose}`));
+    console.log('');
+    console.log(chalk.green(`主要思考法: ${rec.primary}`));
+    console.log(`併用推奨: ${rec.secondary.join(', ')}`);
+  }
+
+  private async handleServerCommand(config: { verbose?: boolean }): Promise<void> {
     try {
       console.log(chalk.cyan('🚀 Starting MCP Server...'));
       const server = new ThinkingMethodsMCPServer();
@@ -365,6 +264,17 @@ class ThinkingCLI {
     }
   }
 
+  /**
+   * バージョン情報取得
+   */
+  private getVersion(): string {
+    try {
+      const packageJson = JSON.parse(readFileSync('package.json', 'utf-8'));
+      return `CONFLUX Thinking Agents MCP v${packageJson.version || '0.1.7'}`;
+    } catch {
+      return 'CONFLUX Thinking Agents MCP v0.1.7';
+    }
+  }
 
   /**
    * 入力データの解析
@@ -470,51 +380,6 @@ class ThinkingCLI {
       'debate': 'ディベート（賛成・反対論点）'
     };
     return method in validMethods;
-  }
-
-  /**
-   * 入力データの詳細バリデーション
-   */
-  private validateInputData(input: string, context: string): { isValid: boolean; error?: string; data?: Record<string, unknown> } {
-    // 空文字チェック
-    if (!input || input.trim().length === 0) {
-      return {
-        isValid: false,
-        error: `${context}の入力データが空です`
-      };
-    }
-
-    try {
-      const data = JSON.parse(input);
-      
-      // オブジェクト形式チェック
-      if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-        return {
-          isValid: false,
-          error: `${context}の入力データはJSONオブジェクト形式である必要があります`
-        };
-      }
-
-      // 最小限の内容チェック
-      const keys = Object.keys(data);
-      if (keys.length === 0) {
-        return {
-          isValid: false,
-          error: `${context}の入力データは空のオブジェクトです。少なくとも1つのフィールドが必要です`
-        };
-      }
-
-      return {
-        isValid: true,
-        data
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        isValid: false,
-        error: `${context}の入力データが無効なJSON形式です: ${errorMessage}`
-      };
-    }
   }
 
   /**

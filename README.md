@@ -15,8 +15,8 @@
 - **📊 型安全**: Zodスキーマベースの完全な型安全性
 - **🌐 MCP準拠**: Model Context Protocolで他のAIツールと統合可能
 - **⚡ 高性能**: TypeScript + tsx による高速実行
-- **🎨 美しいCLI**: Optiqueベースの直感的なコマンドライン
-- **🔗 LLM統合**: Vercel AI SDKで複数のLLMプロバイダーをサポート
+- **🎨 美しいCLI**: Commander.jsベースの直感的なコマンドライン
+- **🔗 LLM統合**: AI SDK v5で複数のLLMプロバイダーをサポート
 - **🛠 自動復旧**: スキーマ不一致やエラー時の自動復旧機能搭載
 - **🏢 エンタープライズ対応**: Cursor、Claude Codeなどの開発環境で使用可能
 
@@ -299,7 +299,7 @@ npx tsx src/mcp/server.ts
 
 #### 利用可能なモデル
 
-AI SDKでサポートされている最新のモデル一覧は、[AI SDK公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)で確認できます。
+AI SDK v5でサポートされている最新のモデル一覧は、[AI SDK v5公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)で確認できます。
 
 **利用可能なプロバイダーとモデル**:
 - **OpenAI**: `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-chat-latest`, `gpt-4o`, `gpt-4o-mini`
@@ -308,7 +308,7 @@ AI SDKでサポートされている最新のモデル一覧は、[AI SDK公式�
 - **OpenAI互換**: カスタムエンドポイント（`openai-compatible`タイプ）
 - **Mock**: 開発・テスト用（`mock`タイプ）
 
-> **📚 詳細**: 各プロバイダーの最新モデル一覧と機能比較は[AI SDK公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)を参照してください。
+> **📚 詳細**: 各プロバイダーの最新モデル一覧と機能比較は[AI SDK v5公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)を参照してください。
 
 ### Cursor / Claude Codeでの使用
 
@@ -468,7 +468,7 @@ globalLLMManager.registerProvider('custom', {
 });
 ```
 
-> **📚 利用可能なモデル**: 本システムでサポートされているプロバイダーとモデル一覧は上記の通りです。各プロバイダーの最新モデル情報は[AI SDK公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)で確認できます。
+> **📚 利用可能なモデル**: 本システムでサポートされているプロバイダーとモデル一覧は上記の通りです。各プロバイダーの最新モデル情報は[AI SDK v5公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)で確認できます。
 
 ## 📚 高度な使用方法
 
@@ -554,8 +554,8 @@ MIT License - 詳細は [LICENSE](LICENSE) ファイルを参照してくださ�
 ## 🙏 謝辞
 
 - [思考法の使い方](docs/思考法の使い方.md) - 本プロジェクトの思考法理論的基盤
-- [Optique](https://github.com/dahlia/optique) - 型安全なCLIパーサー
-- [Vercel AI SDK](https://sdk.vercel.ai/) - LLM統合ライブラリ
+- [Commander.js](https://github.com/tj/commander.js) - 型安全なCLIパーサー
+- [AI SDK v5](https://sdk.vercel.ai/) - LLM統合ライブラリ
 - [Model Context Protocol](https://modelcontextprotocol.io/) - AI統合標準
 - [Anthropic](https://www.anthropic.com/engineering/building-effective-agents) - エージェント設計指針
 
