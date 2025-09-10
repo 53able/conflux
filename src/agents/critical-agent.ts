@@ -1,9 +1,10 @@
 import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
 import { 
   ThinkingMethodType, 
+  DevelopmentPhase,
+  ThinkingResult,
   CriticalInput, 
-  CriticalOutput,
-  DevelopmentPhase 
+  CriticalOutput
 } from '../schemas/thinking.js';
 
 /**
@@ -66,7 +67,7 @@ export class CriticalThinkingAgent extends BaseThinkingAgent {
   /**
    * クリティカルシンキング特有の信頼度計算
    */
-  protected override calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const criticalOutput = output as CriticalOutput;
     
     // 発見された問題点の数と深度から信頼度を算出
@@ -96,7 +97,7 @@ export class CriticalThinkingAgent extends BaseThinkingAgent {
   protected override generateReasoningExplanation(
     input: unknown, 
     output: Record<string, unknown>, 
-    context: AgentContext
+    _context: AgentContext
   ): string {
     const typedInput = input as { claim: string };
     const typedOutput = output as CriticalOutput;
@@ -114,14 +115,14 @@ export class CriticalThinkingAgent extends BaseThinkingAgent {
   /**
    * クリティカルシンキング思考後の次ステップ推奨
    */
-  override getNextRecommendations(result: any, phase: DevelopmentPhase): ThinkingMethodType[] {
+  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
     const baseRecommendations = super.getNextRecommendations(result, phase);
     
     // クリティカル思考後は構造化や代替案検討が有効
     const criticalSpecific: ThinkingMethodType[] = ['logical'];
     
     // 前提の問題が多い場合はPAC思考で分解
-    if (result.output?.questioningResults?.assumptionChallenges?.length > 2) {
+    if (result.output && typeof result.output === 'object' && result.output !== null && 'questioningResults' in result.output && result.output.questioningResults && typeof result.output.questioningResults === 'object' && result.output.questioningResults !== null && 'assumptionChallenges' in result.output.questioningResults && Array.isArray(result.output.questioningResults.assumptionChallenges) && result.output.questioningResults.assumptionChallenges.length > 2) {
       criticalSpecific.push('pac');
     }
     

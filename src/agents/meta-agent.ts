@@ -40,7 +40,7 @@ export class MetaThinkingAgent extends BaseThinkingAgent {
     return result as Record<string, unknown>;
   }
 
-  protected override calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const metaOutput = output as MetaOutput;
     
     const processEffectiveness = metaOutput.processEvaluation.effectiveness;

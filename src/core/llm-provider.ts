@@ -2,12 +2,51 @@ import { openai, createOpenAI } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { google } from '@ai-sdk/google';
 import { generateText, generateObject } from 'ai';
+import { z } from 'zod';
 import 'dotenv/config';
 
 /**
  * サポートするLLMプロバイダーの種類
  */
 export type LLMProviderType = 'openai' | 'anthropic' | 'google' | 'openai-compatible' | 'mock';
+
+/**
+ * LLMプロバイダーの型定義（AI SDKの実際のプロバイダー型）
+ */
+export type LLMProvider = ReturnType<typeof openai> | ReturnType<typeof anthropic> | ReturnType<typeof google> | ReturnType<typeof createOpenAI> | MockProvider;
+
+/**
+ * AI SDKのLanguageModel型
+ */
+export type LanguageModel = Parameters<typeof generateObject>[0]['model'];
+
+/**
+ * モックプロバイダーの型定義
+ */
+export interface MockProvider {
+  provider: string;
+  modelId: string;
+  settings: Record<string, unknown>;
+}
+
+/**
+ * Zodスキーマの型定義
+ */
+export type ZodSchema = z.ZodType<unknown>;
+
+/**
+ * スキーマの型定義（ZodスキーマまたはJSONスキーマ）
+ */
+export type Schema = ZodSchema | Record<string, unknown>;
+
+/**
+ * 生成オプションの型定義
+ */
+export interface GenerationOptions {
+  temperature?: number;
+  maxRetries?: number;
+  enableAutoRecovery?: boolean;
+}
 
 /**
  * LLMプロバイダー設定
@@ -76,7 +115,7 @@ const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMProviderConfig>> = {
  * 5. エラーハンドリング
  */
 export class LLMProviderManager {
-  private providers: Map<string, any> = new Map();
+  private providers: Map<string, LLMProvider> = new Map();
   private configs: Map<string, LLMProviderConfig> = new Map();
   private defaultProvider?: string;
 
@@ -87,7 +126,7 @@ export class LLMProviderManager {
     const fullConfig = { ...DEFAULT_CONFIGS[config.type], ...config };
     this.configs.set(name, fullConfig);
 
-    let provider: any;
+    let provider: LLMProvider;
 
     switch (config.type) {
       case 'openai':
@@ -120,7 +159,7 @@ export class LLMProviderManager {
   /**
    * プロバイダーを取得
    */
-  getProvider(name?: string): any {
+  getProvider(name?: string): LLMProvider {
     const providerName = name || this.defaultProvider;
     if (!providerName) {
       throw new Error('No LLM provider available');
@@ -161,7 +200,7 @@ export class LLMProviderManager {
   /**
    * OpenAIプロバイダーを作成
    */
-  private createOpenAIProvider(config: LLMProviderConfig): any {
+  private createOpenAIProvider(config: LLMProviderConfig): LLMProvider {
     if (!config.apiKey && !process.env.OPENAI_API_KEY) {
       throw new Error('OpenAI API key is required');
     }
@@ -174,7 +213,7 @@ export class LLMProviderManager {
   /**
    * Anthropicプロバイダーを作成
    */
-  private createAnthropicProvider(config: LLMProviderConfig): any {
+  private createAnthropicProvider(config: LLMProviderConfig): LLMProvider {
     if (!config.apiKey && !process.env.ANTHROPIC_API_KEY) {
       throw new Error('Anthropic API key is required');
     }
@@ -187,7 +226,7 @@ export class LLMProviderManager {
   /**
    * Googleプロバイダーを作成
    */
-  private createGoogleProvider(config: LLMProviderConfig): any {
+  private createGoogleProvider(config: LLMProviderConfig): LLMProvider {
     if (!config.apiKey && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
       throw new Error('Google Generative AI API key is required');
     }
@@ -200,7 +239,7 @@ export class LLMProviderManager {
   /**
    * OpenAI互換プロバイダーを作成
    */
-  private createOpenAICompatibleProvider(config: LLMProviderConfig): any {
+  private createOpenAICompatibleProvider(config: LLMProviderConfig): LLMProvider {
     if (!config.baseURL) {
       throw new Error('Base URL is required for OpenAI-compatible provider');
     }
@@ -216,14 +255,14 @@ export class LLMProviderManager {
   /**
    * モックプロバイダーを作成（テスト用）
    */
-  private createMockProvider(config: LLMProviderConfig): any {
+  private createMockProvider(config: LLMProviderConfig): MockProvider {
     // モック実装 - 実際のLLMの代わりにダミーレスポンスを返す
     // モックプロバイダーの実装は実際のLLMを使用しない開発・テスト用
     return {
       provider: 'mock',
       modelId: config.model || 'mock-model',
       settings: {},
-    } as any;
+    };
   }
 }
 
@@ -239,15 +278,11 @@ export class LLMIntegration {
    * 構造化されたオブジェクト生成（自動復旧機能付き）
    */
   async generateStructuredOutput<T>(
-    schema: any,
+    schema: Schema,
     systemPrompt: string,
     userPrompt: string,
     providerName?: string,
-    options?: {
-      temperature?: number;
-      maxRetries?: number;
-      enableAutoRecovery?: boolean;
-    }
+    options?: GenerationOptions
   ): Promise<T> {
     const provider = this.providerManager.getProvider(providerName);
     const maxRetries = options?.maxRetries || 3;
@@ -257,15 +292,15 @@ export class LLMIntegration {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const result = await generateObject({
-          model: provider,
-          schema,
+          model: provider as LanguageModel,
+          schema: schema as ZodSchema,
           system: systemPrompt,
           prompt: userPrompt,
           temperature: options?.temperature ?? 0.3,
         });
 
         // スキーマ検証（Zodスキーマの場合）
-        if (schema.safeParse && enableAutoRecovery) {
+        if (this.isZodSchema(schema) && enableAutoRecovery) {
           const validation = schema.safeParse(result.object);
           if (!validation.success) {
             throw new Error(`Schema validation failed: ${validation.error.message}`);
@@ -311,7 +346,7 @@ export class LLMIntegration {
    */
   private enhancePromptForSchemaCompliance(
     originalPrompt: string, 
-    schema: any, 
+    schema: Schema, 
     error: Error
   ): string {
     const schemaInfo = this.extractSchemaRequirements(schema);
@@ -329,11 +364,12 @@ ${schemaInfo}
   /**
    * スキーマ要件の抽出
    */
-  private extractSchemaRequirements(schema: any): string {
+  private extractSchemaRequirements(schema: Schema): string {
     try {
-      if (schema._def) {
+      if (this.isZodSchema(schema)) {
         // Zodスキーマの場合
-        return `Zodスキーマ型: ${schema._def.typeName || 'Object'}`;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return `Zodスキーマ型: ${(schema as any)._def?.typeName || 'Object'}`;
       }
       return 'JSONスキーマに準拠してください';
     } catch {
@@ -342,14 +378,21 @@ ${schemaInfo}
   }
 
   /**
+   * Zodスキーマかどうかを判定
+   */
+  private isZodSchema(schema: Schema): schema is ZodSchema {
+    return typeof schema === 'object' && schema !== null && '_def' in schema;
+  }
+
+  /**
    * フォールバックプロバイダーでの再試行
    */
   private async tryFallbackProviders<T>(
-    schema: any,
+    schema: Schema,
     systemPrompt: string,
     userPrompt: string,
     excludeProvider?: string,
-    options?: any
+    options?: GenerationOptions
   ): Promise<T> {
     const availableProviders = this.providerManager.listProviders()
       .filter(name => name !== excludeProvider);
@@ -389,7 +432,7 @@ ${schemaInfo}
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const result = await generateText({
-          model: provider,
+          model: provider as LanguageModel,
           system: systemPrompt,
           prompt: userPrompt,
           temperature: options?.temperature ?? 0.3,
@@ -414,7 +457,7 @@ ${schemaInfo}
    * 複数プロバイダーでのフォールバック生成
    */
   async generateWithFallback<T>(
-    schema: any,
+    schema: Schema,
     systemPrompt: string,
     userPrompt: string,
     providerNames?: string[],
@@ -431,7 +474,7 @@ ${schemaInfo}
           providerName,
           { ...options, maxRetries: 1 }
         );
-      } catch (error) {
+      } catch (_error) {
         console.warn(`Provider ${providerName} failed, trying next...`);
         continue;
       }

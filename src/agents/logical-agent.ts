@@ -1,9 +1,10 @@
 import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
 import { 
   ThinkingMethodType, 
+  DevelopmentPhase,
+  ThinkingResult,
   LogicalInput, 
-  LogicalOutput,
-  DevelopmentPhase 
+  LogicalOutput
 } from '../schemas/thinking.js';
 
 /**
@@ -63,7 +64,7 @@ export class LogicalThinkingAgent extends BaseThinkingAgent {
   /**
    * ロジカルシンキング特有の信頼度計算
    */
-  protected override calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const logicalOutput = output as LogicalOutput;
     
     // 論理ステップの数と根拠の豊富さから信頼度を算出
@@ -89,7 +90,7 @@ export class LogicalThinkingAgent extends BaseThinkingAgent {
   protected override generateReasoningExplanation(
     input: unknown, 
     output: Record<string, unknown>, 
-    context: AgentContext
+    _context: AgentContext
   ): string {
     const typedInput = input as { question: string };
     const typedOutput = output as LogicalOutput;
@@ -100,7 +101,7 @@ export class LogicalThinkingAgent extends BaseThinkingAgent {
   /**
    * ロジカルシンキング思考後の次ステップ推奨
    */
-  override getNextRecommendations(result: any, phase: DevelopmentPhase): ThinkingMethodType[] {
+  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
     const baseRecommendations = super.getNextRecommendations(result, phase);
     
     // ロジカルシンキング後は前提の検証が重要

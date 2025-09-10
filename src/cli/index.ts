@@ -7,10 +7,23 @@ import ora from 'ora';
 import { Command } from 'commander';
 
 import { ThinkingOrchestrator } from '../orchestrator/thinking-orchestrator.js';
+import { globalLLMManager } from '../core/llm-provider.js';
 import { 
   ThinkingMethodType, 
-  DevelopmentPhase 
+  DevelopmentPhase,
+  IntegratedThinkingResult,
+  ThinkingResult
 } from '../schemas/thinking.js';
+
+/**
+ * CLIオプションの型定義
+ */
+interface CLIOptions {
+  verbose?: boolean;
+}
+
+// コマンドハンドラーの型定義（将来の拡張用）
+// type CommandHandler = (options: CLIOptions) => Promise<void>;
 import { ThinkingMethodsMCPServer } from '../mcp/server.js';
 
 /**
@@ -41,56 +54,56 @@ class ThinkingCLI {
     program
       .command('phase <phase> <input>')
       .description('局面別思考プロセス実行')
-      .action(async (phase: string, input: string, options: any) => {
-        await this.handlePhaseCommand({ phase, input, verbose: options.verbose });
+      .action(async (phase: string, input: string, options: CLIOptions) => {
+        await this.handlePhaseCommand({ phase, input, verbose: options.verbose ?? false });
       });
 
     // golden コマンド
     program
       .command('golden <input>')
       .description('黄金パターン実行')
-      .action(async (input: string, options: any) => {
-        await this.handleGoldenCommand({ input, verbose: options.verbose });
+      .action(async (input: string, options: CLIOptions) => {
+        await this.handleGoldenCommand({ input, verbose: options.verbose ?? false });
       });
 
     // single コマンド
     program
       .command('single <method> <input>')
       .description('単一思考法実行')
-      .action(async (method: string, input: string, options: any) => {
-        await this.handleSingleCommand({ method, input, verbose: options.verbose });
+      .action(async (method: string, input: string, options: CLIOptions) => {
+        await this.handleSingleCommand({ method, input, verbose: options.verbose ?? false });
       });
 
     // list コマンド
     program
       .command('list')
       .description('利用可能な思考法一覧')
-      .action(async (options: any) => {
-        await this.handleListCommand({ verbose: options.verbose });
+      .action(async (options: CLIOptions) => {
+        await this.handleListCommand({ verbose: options.verbose ?? false });
       });
 
     // recommend コマンド
     program
       .command('recommend <phase>')
       .description('局面別推奨思考法')
-      .action(async (phase: string, options: any) => {
-        await this.handleRecommendCommand({ phase, verbose: options.verbose });
+      .action(async (phase: string, options: CLIOptions) => {
+        await this.handleRecommendCommand({ phase, verbose: options.verbose ?? false });
       });
 
     // server コマンド
     program
       .command('server')
       .description('MCPサーバーを起動')
-      .action(async (options: any) => {
-        await this.handleServerCommand({ verbose: options.verbose });
+      .action(async (options: CLIOptions) => {
+        await this.handleServerCommand({ verbose: options.verbose ?? false });
       });
 
     // mcp コマンド（serverと同じ）
     program
       .command('mcp')
       .description('MCPサーバーを起動（serverと同じ）')
-      .action(async (options: any) => {
-        await this.handleServerCommand({ verbose: options.verbose });
+      .action(async (options: CLIOptions) => {
+        await this.handleServerCommand({ verbose: options.verbose ?? false });
       });
 
     // パース実行
@@ -114,7 +127,7 @@ class ThinkingCLI {
         config.phase as DevelopmentPhase,
         inputData,
         {
-          llmProvider: 'default',
+          llmProvider: globalLLMManager.getProvider(),
           sessionId: `cli-${Date.now()}`,
         }
       );
@@ -137,7 +150,7 @@ class ThinkingCLI {
       const result = await this.orchestrator.processGoldenPattern(
         inputData,
         {
-          llmProvider: 'default',
+          llmProvider: globalLLMManager.getProvider(),
           sessionId: `golden-${Date.now()}`,
         }
       );
@@ -167,7 +180,7 @@ class ThinkingCLI {
         config.method as ThinkingMethodType,
         inputData,
         {
-          llmProvider: 'default',
+          llmProvider: globalLLMManager.getProvider(),
           sessionId: `single-${Date.now()}`,
         }
       );
@@ -181,7 +194,7 @@ class ThinkingCLI {
     }
   }
 
-  private async handleListCommand(config: { verbose?: boolean }): Promise<void> {
+  private async handleListCommand(_config: { verbose?: boolean }): Promise<void> {
     const methods = [
       { name: 'abduction', description: '驚きの事実から説明仮説を形成' },
       { name: 'logical', description: '論点から結論への論理的道筋を構築' },
@@ -203,7 +216,7 @@ class ThinkingCLI {
   }
 
   private async handleRecommendCommand(config: { phase: string; verbose?: boolean }): Promise<void> {
-    if (!this.isValidPhase(config.phase)) {
+      if (!this.isValidPhase(config.phase)) {
       console.error(chalk.red('無効な局面が指定されました'));
       this.printValidPhases();
       return;
@@ -250,7 +263,7 @@ class ThinkingCLI {
     console.log(`併用推奨: ${rec.secondary.join(', ')}`);
   }
 
-  private async handleServerCommand(config: { verbose?: boolean }): Promise<void> {
+  private async handleServerCommand(_config: { verbose?: boolean }): Promise<void> {
     try {
       console.log(chalk.cyan('🚀 Starting MCP Server...'));
       const server = new ThinkingMethodsMCPServer();
@@ -290,7 +303,7 @@ class ThinkingCLI {
   /**
    * 結果の表示（統合結果用）
    */
-  private displayResult(result: any, quiet: boolean): void {
+  private displayResult(result: IntegratedThinkingResult, quiet: boolean): void {
     if (!quiet) {
       console.log(chalk.blue.bold(`🎯 局面: ${result.phase}`));
       console.log(chalk.green(`主要思考法: ${result.primaryMethod}`));
@@ -322,7 +335,7 @@ class ThinkingCLI {
   /**
    * 結果の表示（単一思考法結果用）
    */
-  private displaySingleResult(result: any, quiet: boolean): void {
+  private displaySingleResult(result: ThinkingResult, quiet: boolean): void {
     if (!quiet) {
       console.log(chalk.blue.bold(`🧠 思考法: ${result.method}`));
       console.log(`信頼度: ${(result.confidence * 100).toFixed(1)}%`);

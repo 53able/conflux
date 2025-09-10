@@ -12,18 +12,10 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { ThinkingOrchestrator } from '../orchestrator/thinking-orchestrator.js';
+import { globalLLMManager } from '../core/llm-provider.js';
 import { 
   ThinkingMethodType, 
-  DevelopmentPhase,
-  AbductionInput,
-  LogicalInput,
-  CriticalInput,
-  MECEInput,
-  DeductiveInput,
-  InductiveInput,
-  PACInput,
-  MetaInput,
-  DebateInput,
+  DevelopmentPhase
 } from '../schemas/thinking.js';
 
 /**
@@ -295,7 +287,7 @@ export class ThinkingMethodsMCPServer {
     const parsed = ProcessPhaseInputSchema.parse(args);
     
     const context = {
-      llmProvider: parsed.llmProvider || 'default',
+      llmProvider: globalLLMManager.getProvider(),
       userId: parsed.userId || undefined,
       sessionId: `phase-${Date.now()}`,
     };
@@ -323,7 +315,7 @@ export class ThinkingMethodsMCPServer {
     const parsed = ProcessGoldenPatternInputSchema.parse(args);
     
     const context = {
-      llmProvider: parsed.llmProvider || 'default',
+      llmProvider: globalLLMManager.getProvider(),
       userId: parsed.userId || undefined,
       sessionId: `golden-${Date.now()}`,
     };
@@ -350,7 +342,7 @@ export class ThinkingMethodsMCPServer {
     const parsed = ProcessSingleMethodInputSchema.parse(args);
     
     const context = {
-      llmProvider: parsed.llmProvider || 'default',
+      llmProvider: globalLLMManager.getProvider(),
       userId: parsed.userId || undefined,
       sessionId: `single-${Date.now()}`,
     };

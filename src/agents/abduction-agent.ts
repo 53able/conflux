@@ -1,9 +1,10 @@
 import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
 import { 
   ThinkingMethodType, 
+  DevelopmentPhase,
+  ThinkingResult,
   AbductionInput, 
-  AbductionOutput,
-  DevelopmentPhase 
+  AbductionOutput
 } from '../schemas/thinking.js';
 
 /**
@@ -96,14 +97,14 @@ export class AbductionAgent extends BaseThinkingAgent {
   /**
    * アブダクション思考後の次ステップ推奨
    */
-  override getNextRecommendations(result: any, phase: DevelopmentPhase): ThinkingMethodType[] {
+  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
     const baseRecommendations = super.getNextRecommendations(result, phase);
     
     // アブダクション後は仮説検証が重要
     const abductionSpecific: ThinkingMethodType[] = ['deductive', 'inductive'];
     
     // 複数仮説がある場合はクリティカル思考で精査
-    if (result.output?.hypotheses && result.output.hypotheses.length > 1) {
+    if (result.output && 'hypotheses' in result.output && Array.isArray(result.output.hypotheses) && result.output.hypotheses.length > 1) {
       abductionSpecific.push('critical');
     }
 

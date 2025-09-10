@@ -55,7 +55,7 @@ export class DeductiveThinkingAgent extends BaseThinkingAgent {
     return result as Record<string, unknown>;
   }
 
-  protected override calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const deductiveOutput = output as DeductiveOutput;
     
     // 論理的妥当性と前提の信頼性から計算
@@ -69,7 +69,7 @@ export class DeductiveThinkingAgent extends BaseThinkingAgent {
   protected override generateReasoningExplanation(
     input: unknown, 
     output: Record<string, unknown>, 
-    context: AgentContext
+    _context: AgentContext
   ): string {
     const typedInput = input as { majorPremise: string; minorPremise: string };
     const typedOutput = output as DeductiveOutput;

@@ -40,7 +40,7 @@ export class InductiveThinkingAgent extends BaseThinkingAgent {
     return result as Record<string, unknown>;
   }
 
-  protected override calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const inductiveOutput = output as InductiveOutput;
     
     // サンプルサイズと信頼度の平均から算出

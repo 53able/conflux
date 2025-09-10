@@ -56,7 +56,7 @@ export class MECEAgent extends BaseThinkingAgent {
     return result as Record<string, unknown>;
   }
 
-  protected override calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const meceOutput = output as MECEOutput;
     
     // 完全性スコアがベース
@@ -74,7 +74,7 @@ export class MECEAgent extends BaseThinkingAgent {
   protected override generateReasoningExplanation(
     input: unknown, 
     output: Record<string, unknown>, 
-    context: AgentContext
+    _context: AgentContext
   ): string {
     const typedInput = input as { purpose: string; items: string[] };
     const typedOutput = output as MECEOutput;

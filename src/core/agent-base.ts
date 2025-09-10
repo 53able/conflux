@@ -1,18 +1,19 @@
 import { z } from 'zod';
-import { generateText, generateObject } from 'ai';
+import { generateObject } from 'ai';
 import { 
   ThinkingMethodType, 
   ThinkingResult, 
   ThinkingProcessStatus,
   DevelopmentPhase 
 } from '../schemas/thinking.js';
+import type { LLMProvider, LanguageModel } from './llm-provider.js';
 import { LLMIntegration } from './llm-provider.js';
 
 /**
  * エージェント実行コンテキスト
  */
 export interface AgentContext {
-  llmProvider: any; // AI provider from Vercel AI
+  llmProvider: LLMProvider; // AI provider from Vercel AI
   llmIntegration?: LLMIntegration; // 自動復旧機能付きLLM統合
   userId?: string | undefined;
   sessionId?: string;
@@ -41,12 +42,12 @@ export interface IThinkingAgent {
   /**
    * 思考法を実行する
    */
-  think(input: unknown, context: AgentContext): Promise<ThinkingResult>;
+  think(_input: unknown, context: AgentContext): Promise<ThinkingResult>;
   
   /**
    * 入力データを検証する
    */
-  validateInput(input: unknown): boolean;
+  validateInput(_input: unknown): boolean;
   
   /**
    * 次に推奨される思考法を提案する
@@ -71,56 +72,56 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
    * メイン思考プロセス実行
    * Template Method パターンで標準フローを定義
    */
-  async think(input: unknown, context: AgentContext): Promise<ThinkingResult> {
+  async think(_input: unknown, _context: AgentContext): Promise<ThinkingResult> {
     const startTime = Date.now();
     
     try {
       // 1. 入力検証
-      if (!this.validateInput(input)) {
-        return this.createFailureResult(input, 'Invalid input provided');
+      if (!this.validateInput(_input)) {
+        return this.createFailureResult(_input, 'Invalid input provided');
       }
 
       // 2. 前処理
-      const preprocessedInput = await this.preprocess(input, context);
+      const preprocessedInput = await this.preprocess(_input, _context);
 
       // 3. LLMによる思考実行
-      const output = await this.executeLLMThinking(preprocessedInput, context);
+      const output = await this.executeLLMThinking(preprocessedInput, _context);
 
       // 4. 後処理と検証
-      const validatedOutput = await this.postprocess(output, context);
+      const validatedOutput = await this.postprocess(output, _context);
 
       // 5. 次の推奨思考法を決定
       const recommendations = this.getNextRecommendations(
         { 
           method: this.capability.methodType, 
           status: 'completed' as ThinkingProcessStatus,
-          input: preprocessedInput as Record<string, unknown>,
+          input: _input as Record<string, unknown>,
           output: validatedOutput,
           confidence: 0.8,
           reasoning: ''
         }, 
-        context.metadata?.phase as DevelopmentPhase || 'requirement_definition'
+        _context.metadata?.phase as DevelopmentPhase || 'requirement_definition'
       );
 
       // 6. 結果オブジェクト構築
       return {
         method: this.capability.methodType,
         status: 'completed' as ThinkingProcessStatus,
-        input: preprocessedInput as Record<string, unknown>,
+        input: _input as Record<string, unknown>,
         output: validatedOutput,
-        confidence: this.calculateConfidence(validatedOutput, context),
-        reasoning: this.generateReasoningExplanation(input, validatedOutput, context),
+        confidence: this.calculateConfidence(validatedOutput, _context),
+        reasoning: this.generateReasoningExplanation(_input, validatedOutput, _context),
         nextRecommendations: recommendations,
         metadata: {
           executionTime: Date.now() - startTime,
           timestamp: new Date().toISOString(),
-          ...context.metadata,
+          ..._context.metadata,
         },
       };
 
     } catch (error) {
       console.error(`Error in ${this.capability.methodType} agent:`, error);
-      return this.createFailureResult(input, error instanceof Error ? error.message : 'Unknown error');
+      return this.createFailureResult(_input, error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -152,26 +153,26 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
   /**
    * 前処理フック（サブクラスでオーバーライド可能）
    */
-  protected async preprocess(input: unknown, context: AgentContext): Promise<unknown> {
-    return input;
+  protected async preprocess(_input: unknown, _context: AgentContext): Promise<unknown> {
+    return _input;
   }
 
   /**
    * LLMによる思考実行（サブクラスで必須実装）
    */
-  protected abstract executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>>;
+  protected abstract executeLLMThinking(_input: unknown, _context: AgentContext): Promise<Record<string, unknown>>;
 
   /**
    * 後処理フック（サブクラスでオーバーライド可能）
    */
-  protected async postprocess(output: Record<string, unknown>, context: AgentContext): Promise<Record<string, unknown>> {
-    return output;
+  protected async postprocess(_output: Record<string, unknown>, _context: AgentContext): Promise<Record<string, unknown>> {
+    return _output;
   }
 
   /**
    * 信頼度計算（サブクラスでオーバーライド可能）
    */
-  protected calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected calculateConfidence(_output: Record<string, unknown>, _context: AgentContext): number {
     // デフォルトは中程度の信頼度
     return 0.7;
   }
@@ -223,7 +224,7 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
       }
 
       const result = await generateObject({
-        model: model as any, // AI SDK v5の型互換性問題を回避
+        model: model as LanguageModel,
         schema,
         system: systemPrompt,
         prompt: userPrompt,
@@ -240,9 +241,9 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
    * 推論説明生成（サブクラスでオーバーライド可能）
    */
   protected generateReasoningExplanation(
-    input: unknown, 
-    output: Record<string, unknown>, 
-    context: AgentContext
+    _input: unknown, 
+    _output: Record<string, unknown>, 
+    _context: AgentContext
   ): string {
     return `Applied ${this.capability.methodType} thinking methodology to analyze the input and generate structured output.`;
   }
@@ -295,7 +296,7 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
  */
 export abstract class LLMPromptTemplate {
   protected abstract getSystemPrompt(): string;
-  protected abstract getUserPrompt(input: unknown): string;
+  protected abstract getUserPrompt(_input: unknown): string;
   
   protected getCommonSystemPrompt(): string {
     return `You are a specialized thinking methodology expert. Your role is to apply structured thinking approaches to analyze problems and generate insights.

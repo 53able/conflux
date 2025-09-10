@@ -3,7 +3,9 @@ import {
   DevelopmentPhase, 
   ThinkingResult, 
   IntegratedThinkingResult,
-  ThinkingProcessStatus 
+  AbductionOutput,
+  CriticalOutput,
+  MetaOutput
 } from '../schemas/thinking.js';
 import { type IThinkingAgent, type AgentContext } from '../core/agent-base.js';
 
@@ -285,7 +287,7 @@ export class ThinkingOrchestrator {
     phase: DevelopmentPhase,
     strategy: OrchestrationStrategy,
     results: ThinkingResult[],
-    originalInput: Record<string, unknown>
+    _originalInput: Record<string, unknown>
   ): IntegratedThinkingResult {
     const successfulResults = results.filter(r => r.status === 'completed');
     const failedCount = results.length - successfulResults.length;
@@ -350,14 +352,15 @@ export class ThinkingOrchestrator {
       if (result.output) {
         // 各思考法の特性に応じてアクションアイテムを抽出
         switch (result.method) {
-          case 'critical':
-            const criticalOutput = result.output as any;
+          case 'critical': {
+            const criticalOutput = result.output as CriticalOutput;
             if (criticalOutput.recommendations) {
               actionItems.push(...criticalOutput.recommendations);
             }
             break;
-          case 'abduction':
-            const abductionOutput = result.output as any;
+          }
+          case 'abduction': {
+            const abductionOutput = result.output as AbductionOutput;
             if (abductionOutput.hypotheses) {
               const topHypothesis = abductionOutput.hypotheses[0];
               if (topHypothesis?.testablePredicitions) {
@@ -365,12 +368,14 @@ export class ThinkingOrchestrator {
               }
             }
             break;
-          case 'meta':
-            const metaOutput = result.output as any;
+          }
+          case 'meta': {
+            const metaOutput = result.output as MetaOutput;
             if (metaOutput.recommendations) {
-              actionItems.push(...metaOutput.recommendations.map((r: any) => `${r.aspect}: ${r.improvement}`));
+              actionItems.push(...metaOutput.recommendations.map((r: { aspect: string; improvement: string }) => `${r.aspect}: ${r.improvement}`));
             }
             break;
+          }
         }
       }
     });

@@ -39,7 +39,7 @@ export class PACThinkingAgent extends BaseThinkingAgent {
     return result as Record<string, unknown>;
   }
 
-  protected override calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const pacOutput = output as PACOutput;
     
     const assumptionValidityScore = pacOutput.assumptions_validity.isValid ? 0.4 : 0.1;

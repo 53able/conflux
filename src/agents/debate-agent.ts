@@ -39,7 +39,7 @@ export class DebateThinkingAgent extends BaseThinkingAgent {
     return result as Record<string, unknown>;
   }
 
-  protected override calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const debateOutput = output as DebateOutput;
     
     // 賛成・反対論点のバランス
@@ -61,7 +61,7 @@ export class DebateThinkingAgent extends BaseThinkingAgent {
   protected override generateReasoningExplanation(
     input: unknown, 
     output: Record<string, unknown>, 
-    context: AgentContext
+    _context: AgentContext
   ): string {
     const typedInput = input as { proposition: string };
     const typedOutput = output as DebateOutput;
