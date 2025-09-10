@@ -205,16 +205,20 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
     try {
       const { openai } = await import('@ai-sdk/openai');
       const { anthropic } = await import('@ai-sdk/anthropic');
+      const { google } = await import('@ai-sdk/google');
       
-      // デフォルトプロバイダー選択
+      // デフォルトプロバイダー選択（OpenAI優先）
       const defaultProvider = process.env.DEFAULT_LLM_PROVIDER || 'openai';
       
       let model;
       if (defaultProvider === 'anthropic') {
-        const modelName = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+        const modelName = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-latest';
         model = anthropic(modelName);
+      } else if (defaultProvider === 'google') {
+        const modelName = process.env.GOOGLE_MODEL || 'gemini-2.0-flash-exp';
+        model = google(modelName);
       } else {
-        const modelName = process.env.OPENAI_MODEL || 'gpt-4o';
+        const modelName = process.env.OPENAI_MODEL || 'gpt-5';
         model = openai(modelName);
       }
 

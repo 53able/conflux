@@ -1,12 +1,13 @@
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 import { generateText, generateObject } from 'ai';
 import 'dotenv/config';
 
 /**
  * サポートするLLMプロバイダーの種類
  */
-export type LLMProviderType = 'openai' | 'anthropic' | 'openai-compatible' | 'mock';
+export type LLMProviderType = 'openai' | 'anthropic' | 'google' | 'openai-compatible' | 'mock';
 
 /**
  * LLMプロバイダー設定
@@ -28,14 +29,21 @@ export interface LLMProviderConfig {
  */
 const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMProviderConfig>> = {
   openai: {
-    model: process.env.OPENAI_MODEL || 'gpt-4o',
+    model: process.env.OPENAI_MODEL || 'gpt-5',
     defaultParams: {
       temperature: 0.3,
       maxTokens: 2000,
     },
   },
   anthropic: {
-    model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-latest',
+    defaultParams: {
+      temperature: 0.3,
+      maxTokens: 2000,
+    },
+  },
+  google: {
+    model: process.env.GOOGLE_MODEL || 'gemini-2.0-flash-exp',
     defaultParams: {
       temperature: 0.3,
       maxTokens: 2000,
@@ -87,6 +95,9 @@ export class LLMProviderManager {
         break;
       case 'anthropic':
         provider = this.createAnthropicProvider(fullConfig);
+        break;
+      case 'google':
+        provider = this.createGoogleProvider(fullConfig);
         break;
       case 'openai-compatible':
         provider = this.createOpenAICompatibleProvider(fullConfig);
@@ -156,7 +167,7 @@ export class LLMProviderManager {
     }
     
     // AI SDK v5の公式パターンに従う
-    const modelName = config.model || process.env.OPENAI_MODEL || 'gpt-4o';
+    const modelName = config.model || process.env.OPENAI_MODEL || 'gpt-5';
     return openai(modelName);
   }
 
@@ -169,8 +180,21 @@ export class LLMProviderManager {
     }
     
     // AI SDK v5の公式パターンに従う
-    const modelName = config.model || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+    const modelName = config.model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-latest';
     return anthropic(modelName);
+  }
+
+  /**
+   * Googleプロバイダーを作成
+   */
+  private createGoogleProvider(config: LLMProviderConfig): any {
+    if (!config.apiKey && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      throw new Error('Google Generative AI API key is required');
+    }
+    
+    // AI SDK v5の公式パターンに従う
+    const modelName = config.model || process.env.GOOGLE_MODEL || 'gemini-2.0-flash-exp';
+    return google(modelName);
   }
 
   /**
@@ -466,6 +490,14 @@ export function initializeDefaultProviders(): void {
     });
   }
 
+  // Googleプロバイダー（環境変数があれば）
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    globalLLMManager.registerProvider('google', {
+      type: 'google',
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    });
+  }
+
   // モックプロバイダー（開発・テスト用）
   globalLLMManager.registerProvider('mock', {
     type: 'mock',
@@ -473,24 +505,29 @@ export function initializeDefaultProviders(): void {
 
   // 環境変数からデフォルトプロバイダーを設定
   const defaultProvider = process.env.DEFAULT_LLM_PROVIDER;
-  if (defaultProvider && ['openai', 'anthropic', 'mock'].includes(defaultProvider)) {
+  if (defaultProvider && ['openai', 'anthropic', 'google', 'mock'].includes(defaultProvider)) {
     // 指定されたプロバイダーが利用可能かチェック
     const isOpenAIAvailable = process.env.OPENAI_API_KEY;
     const isAnthropicAvailable = process.env.ANTHROPIC_API_KEY;
+    const isGoogleAvailable = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     
     if (defaultProvider === 'openai' && isOpenAIAvailable) {
       globalLLMManager.setDefaultProvider('openai');
     } else if (defaultProvider === 'anthropic' && isAnthropicAvailable) {
       globalLLMManager.setDefaultProvider('anthropic');
+    } else if (defaultProvider === 'google' && isGoogleAvailable) {
+      globalLLMManager.setDefaultProvider('google');
     } else if (defaultProvider === 'mock') {
       globalLLMManager.setDefaultProvider('mock');
     }
   } else {
-    // 環境変数で指定されていない場合、利用可能なプロバイダーから自動選択
-    if (process.env.ANTHROPIC_API_KEY) {
-      globalLLMManager.setDefaultProvider('anthropic');
-    } else if (process.env.OPENAI_API_KEY) {
+    // 環境変数で指定されていない場合、利用可能なプロバイダーから自動選択（OpenAI優先）
+    if (process.env.OPENAI_API_KEY) {
       globalLLMManager.setDefaultProvider('openai');
+    } else if (process.env.ANTHROPIC_API_KEY) {
+      globalLLMManager.setDefaultProvider('anthropic');
+    } else if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      globalLLMManager.setDefaultProvider('google');
     }
   }
 }

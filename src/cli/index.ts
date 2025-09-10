@@ -4,12 +4,41 @@ import { readFileSync } from 'fs';
 import chalk from 'chalk';
 import ora from 'ora';
 
+import { object, or, command, argument } from '@optique/core/parser';
+import { string } from '@optique/core/valueparser';
+import { run } from '@optique/run';
+
 import { ThinkingOrchestrator } from '../orchestrator/thinking-orchestrator.js';
 import { 
   ThinkingMethodType, 
   DevelopmentPhase 
 } from '../schemas/thinking.js';
 import { ThinkingMethodsMCPServer } from '../mcp/server.js';
+
+// シンプルなコマンド型定義（実用優先版）
+type PhaseCommandResult = {
+  readonly phase: string;
+  readonly input: string;
+};
+
+type GoldenCommandResult = {
+  readonly input: string;
+};
+
+type SingleCommandResult = {
+  readonly method: string;
+  readonly input: string;
+};
+
+type RecommendCommandResult = {
+  readonly phase: string;
+};
+
+type ListCommandResult = {};
+type ServerCommandResult = {};
+
+// Optiqueが実際に返すデータ構造
+type CLICommand = PhaseCommandResult | GoldenCommandResult | SingleCommandResult | RecommendCommandResult | ListCommandResult | ServerCommandResult;
 
 /**
  * 簡易CLIアプリケーションクラス
@@ -22,84 +51,147 @@ class ThinkingCLI {
   }
 
   /**
-   * メイン実行関数
+   * 型安全なCLIパーサーの定義（実用優先版）
+   */
+  private createParser() {
+    // 各サブコマンドのパーサー（位置引数使用）
+    const phaseParser = object({
+      phase: argument(string()),
+      input: argument(string()),
+    });
+
+    const goldenParser = object({
+      input: argument(string()),
+    });
+
+    const singleParser = object({
+      method: argument(string()),
+      input: argument(string()),
+    });
+
+    const listParser = object({});
+
+    const recommendParser = object({
+      phase: argument(string()),
+    });
+
+    const serverParser = object({});
+
+    // サブコマンド定義（シンプル構造）
+    return or(
+      command('phase', phaseParser),
+      command('golden', goldenParser),
+      command('single', singleParser),
+      command('list', listParser),
+      command('recommend', recommendParser),
+      command('server', serverParser),
+      command('mcp', serverParser)
+    );
+  }
+
+  /**
+   * メイン実行関数（Optiqueベース）
    */
   async execute(): Promise<void> {
-    const args = process.argv.slice(2);
-    
-    if (args.length === 0) {
-      this.printUsage();
-      return;
-    }
-
-    const command = args[0];
-    
     try {
-      switch (command) {
-        case 'phase':
-          await this.handlePhaseCommand(args);
-          break;
-        case 'golden':
-          await this.handleGoldenCommand(args);
-          break;
-        case 'single':
-          await this.handleSingleCommand(args);
-          break;
-        case 'list':
-          await this.handleListCommand();
-          break;
-        case 'recommend':
-          await this.handleRecommendCommand(args);
-          break;
-        case 'server':
-        case 'mcp':
-          await this.handleServerCommand();
-          break;
-        case '--help':
-        case '-h':
-        case 'help':
-          this.printUsage();
-          break;
-        case '--version':
-        case '-v':
-        case 'version':
-          this.printVersion();
-          break;
-        default:
-          console.error(chalk.red(`未知のコマンド: ${command}`));
-          this.printUsage();
-          process.exit(1);
-      }
+      const parser = this.createParser();
+      const config = run(parser);
+
+      // コマンド別の処理
+      await this.handleCommand(config);
+
     } catch (error) {
-      this.handleError(error, args.includes('--verbose'));
+      this.handleError(error, false);
     }
   }
 
   /**
-   * 局面別思考プロセス実行
+   * 型安全なコマンド処理
    */
-  private async handlePhaseCommand(args: string[]): Promise<void> {
-    if (args.length < 3) {
-      console.error(chalk.red('使用方法: thinking-agents phase <PHASE> <INPUT_JSON>'));
-      return;
+  private async handleCommand(config: CLICommand): Promise<void> {
+    try {
+      // コマンドを判定してディスパッチ
+      if (this.isPhaseCommand(config)) {
+        await this.handlePhaseCommandTyped(config);
+      } else if (this.isGoldenCommand(config)) {
+        await this.handleGoldenCommandTyped(config);
+      } else if (this.isSingleCommand(config)) {
+        await this.handleSingleCommandTyped(config);
+      } else if (this.isRecommendCommand(config)) {
+        await this.handleRecommendCommandTyped(config);
+      } else if (this.isListCommand(config)) {
+        await this.handleListCommand();
+      } else {
+        await this.handleServerCommand();
+      }
+    } catch (error) {
+      this.handleError(error, false);
     }
+  }
 
-    const phase = args[1];
-    const inputJson = args[2];
+  /**
+   * 型ガード関数群（シンプル版）
+   */
+  private isPhaseCommand(config: CLICommand): config is PhaseCommandResult {
+    return 'phase' in config && 'input' in config;
+  }
+
+  private isGoldenCommand(config: CLICommand): config is GoldenCommandResult {
+    return 'input' in config && !('phase' in config) && !('method' in config);
+  }
+
+  private isSingleCommand(config: CLICommand): config is SingleCommandResult {
+    return 'method' in config && 'input' in config;
+  }
+
+  private isRecommendCommand(config: CLICommand): config is RecommendCommandResult {
+    return 'phase' in config && !('input' in config);
+  }
+
+  private isListCommand(config: CLICommand): config is ListCommandResult {
+    return !('phase' in config) && !('input' in config) && !('method' in config);
+  }
+
+  /**
+   * バージョン情報取得
+   */
+  private getVersion(): string {
+    try {
+      const packageJson = JSON.parse(readFileSync('package.json', 'utf-8'));
+      return `CONFLUX Thinking Agents MCP v${packageJson.version || '0.1.6'}`;
+    } catch {
+      return 'CONFLUX Thinking Agents MCP v0.1.6';
+    }
+  }
+
+  /**
+   * 型安全な局面別思考プロセス実行（拡張版）
+   */
+  private async handlePhaseCommandTyped(config: PhaseCommandResult): Promise<void> {
     const spinner = ora('思考プロセスを実行中...').start();
     
     try {
-      if (!this.isValidPhase(phase)) {
-        spinner.fail('無効な局面が指定されました');
+      // 局面の妥当性チェック
+      if (!this.isValidPhase(config.phase)) {
+        spinner.fail(`無効な局面が指定されました: ${config.phase}`);
         this.printValidPhases();
         return;
       }
 
-      const inputData = this.parseInputData(inputJson);
-      
+      // 入力データのバリデーション
+      const validation = this.validateInputData(config.input, '局面別思考プロセス');
+      if (!validation.isValid) {
+        spinner.fail(`入力データエラー: ${validation.error}`);
+        console.log(chalk.yellow('正しい形式例: \'{"issue":"問題の説明","context":"追加の背景情報"}\''));
+        return;
+      }
+
+      // デバッグ情報表示
+      console.log(chalk.gray(`実行局面: ${config.phase}`));
+
       const result = await this.orchestrator.processPhase(
-        phase as DevelopmentPhase,
-        inputData,
+        config.phase as DevelopmentPhase,
+        validation.data!,
         {
           llmProvider: 'default',
           sessionId: `cli-${Date.now()}`,
@@ -116,19 +208,13 @@ class ThinkingCLI {
   }
 
   /**
-   * 黄金パターン実行
+   * 型安全な黄金パターン実行
    */
-  private async handleGoldenCommand(args: string[]): Promise<void> {
-    if (args.length < 2) {
-      console.error(chalk.red('使用方法: thinking-agents golden <INPUT_JSON>'));
-      return;
-    }
-
-    const inputJson = args[1];
+  private async handleGoldenCommandTyped(config: GoldenCommandResult): Promise<void> {
     const spinner = ora('黄金パターン（探索→実装）を実行中...').start();
     
     try {
-      const inputData = this.parseInputData(inputJson);
+      const inputData = this.parseInputData(config.input);
       
       const result = await this.orchestrator.processGoldenPattern(
         inputData,
@@ -148,81 +234,53 @@ class ThinkingCLI {
   }
 
   /**
-   * 単一思考法実行
+   * 型安全な単一思考法実行（拡張版）
    */
-  private async handleSingleCommand(args: string[]): Promise<void> {
-    if (args.length < 3) {
-      console.error(chalk.red('使用方法: thinking-agents single <METHOD> <INPUT_JSON>'));
-      return;
-    }
-
-    const method = args[1];
-    const inputJson = args[2];
-    const spinner = ora(`${method}思考を実行中...`).start();
+  private async handleSingleCommandTyped(config: SingleCommandResult): Promise<void> {
+    const spinner = ora(`${config.method}思考を実行中...`).start();
     
     try {
-      if (!this.isValidMethod(method)) {
-        spinner.fail('無効な思考法が指定されました');
+      // 思考法の妥当性チェック
+      if (!this.isValidMethod(config.method)) {
+        spinner.fail(`無効な思考法が指定されました: ${config.method}`);
         this.printValidMethods();
         return;
       }
 
-      const inputData = this.parseInputData(inputJson);
-      
+      // 入力データのバリデーション
+      const validation = this.validateInputData(config.input, '単一思考法');
+      if (!validation.isValid) {
+        spinner.fail(`入力データエラー: ${validation.error}`);
+        console.log(chalk.yellow('正しい形式例: \'{"claim":"検証したい主張","evidence":"根拠となる情報"}\''));
+        return;
+      }
+
+      // デバッグ情報表示
+      console.log(chalk.gray(`実行思考法: ${config.method}`));
+
       const result = await this.orchestrator.processSingleMethod(
-        method as ThinkingMethodType,
-        inputData,
+        config.method as ThinkingMethodType,
+        validation.data!,
         {
           llmProvider: 'default',
           sessionId: `single-${Date.now()}`,
         }
       );
 
-      spinner.succeed(`${method}思考完了`);
+      spinner.succeed(`${config.method}思考完了`);
       this.displaySingleResult(result, false);
       
     } catch (error) {
-      spinner.fail(`${method}思考でエラーが発生しました`);
+      spinner.fail(`${config.method}思考でエラーが発生しました`);
       throw error;
     }
   }
 
   /**
-   * 思考法一覧表示
+   * 型安全な推奨思考法表示
    */
-  private async handleListCommand(): Promise<void> {
-    const methods = [
-      { name: 'abduction', description: '驚きの事実から説明仮説を形成' },
-      { name: 'logical', description: '論点から結論への論理的道筋を構築' },
-      { name: 'critical', description: '前提・論点・根拠を体系的に疑う' },
-      { name: 'mece', description: '項目を漏れなく重複なく分類' },
-      { name: 'deductive', description: '一般原則から具体的結論を導出' },
-      { name: 'inductive', description: '個別事例から共通パターンを発見' },
-      { name: 'pac', description: '前提・仮定・結論に分解して検証' },
-      { name: 'meta', description: '思考プロセス自体を評価・改善' },
-      { name: 'debate', description: '賛成・反対の論点を体系的に検討' },
-    ];
-
-    console.log(chalk.blue.bold('利用可能な思考法:'));
-    console.log('');
-
-    methods.forEach(method => {
-      console.log(`${chalk.green(method.name.padEnd(12))} ${method.description}`);
-    });
-  }
-
-  /**
-   * 推奨思考法表示
-   */
-  private async handleRecommendCommand(args: string[]): Promise<void> {
-    if (args.length < 2) {
-      console.error(chalk.red('使用方法: thinking-agents recommend <PHASE>'));
-      return;
-    }
-
-    const phase = args[1];
-
-    if (!this.isValidPhase(phase)) {
+  private async handleRecommendCommandTyped(config: RecommendCommandResult): Promise<void> {
+    if (!this.isValidPhase(config.phase)) {
       console.error(chalk.red('無効な局面が指定されました'));
       this.printValidPhases();
       return;
@@ -251,18 +309,44 @@ class ThinkingCLI {
       },
     };
 
-    const rec = recommendations[phase];
+    const rec = recommendations[config.phase];
     if (!rec) {
       console.log(chalk.yellow('この局面の推奨情報は準備中です'));
       return;
     }
 
-    console.log(chalk.blue.bold(`局面: ${phase}`));
+    console.log(chalk.blue.bold(`局面: ${config.phase}`));
     console.log(chalk.gray(`目的: ${rec.purpose}`));
     console.log('');
     console.log(chalk.green(`主要思考法: ${rec.primary}`));
     console.log(`併用推奨: ${rec.secondary.join(', ')}`);
   }
+
+
+  /**
+   * 思考法一覧表示
+   */
+  private async handleListCommand(): Promise<void> {
+    const methods = [
+      { name: 'abduction', description: '驚きの事実から説明仮説を形成' },
+      { name: 'logical', description: '論点から結論への論理的道筋を構築' },
+      { name: 'critical', description: '前提・論点・根拠を体系的に疑う' },
+      { name: 'mece', description: '項目を漏れなく重複なく分類' },
+      { name: 'deductive', description: '一般原則から具体的結論を導出' },
+      { name: 'inductive', description: '個別事例から共通パターンを発見' },
+      { name: 'pac', description: '前提・仮定・結論に分解して検証' },
+      { name: 'meta', description: '思考プロセス自体を評価・改善' },
+      { name: 'debate', description: '賛成・反対の論点を体系的に検討' },
+    ];
+
+    console.log(chalk.blue.bold('利用可能な思考法:'));
+    console.log('');
+
+    methods.forEach(method => {
+      console.log(`${chalk.green(method.name.padEnd(12))} ${method.description}`);
+    });
+  }
+
 
   /**
    * MCPサーバーコマンドを処理
@@ -281,42 +365,6 @@ class ThinkingCLI {
     }
   }
 
-  /**
-   * 使用方法表示
-   */
-  private printUsage(): void {
-    console.log(chalk.blue.bold('CONFLUX 思考法ツール'));
-    console.log('');
-    console.log('使用方法:');
-    console.log('  thinking-agents <command> [options]');
-    console.log('');
-    console.log('コマンド:');
-    console.log('  phase <PHASE> <INPUT>     局面別思考プロセス実行');
-    console.log('  golden <INPUT>            黄金パターン実行');
-    console.log('  single <METHOD> <INPUT>   単一思考法実行');
-    console.log('  list                      利用可能な思考法一覧');
-    console.log('  recommend <PHASE>         局面別推奨思考法');
-    console.log('  server                    MCPサーバーを起動');
-    console.log('  help                      このヘルプを表示');
-    console.log('  version                   バージョン情報を表示');
-    console.log('');
-    console.log('例:');
-    console.log('  thinking-agents phase debugging \'{"issue": "APIエラー"}\'');
-    console.log('  thinking-agents golden \'{"problem": "新機能設計"}\'');
-    console.log('  thinking-agents single critical \'{"claim": "この実装で十分"}\'');
-  }
-
-  /**
-   * バージョン情報表示
-   */
-  private printVersion(): void {
-    try {
-      const packageJson = JSON.parse(readFileSync('package.json', 'utf-8'));
-      console.log(`CONFLUX Thinking Agents MCP v${packageJson.version || '0.1.6'}`);
-    } catch {
-      console.log('CONFLUX Thinking Agents MCP v0.1.6');
-    }
-  }
 
   /**
    * 入力データの解析
@@ -383,28 +431,90 @@ class ThinkingCLI {
   }
 
   /**
-   * 局面の妥当性確認
+   * 局面の妥当性確認（拡張版）
    */
   private isValidPhase(phase: string): boolean {
-    const validPhases = [
-      'business_exploration', 'requirement_definition', 'value_hypothesis',
-      'architecture_design', 'prioritization', 'estimation_planning',
-      'implementation', 'debugging', 'refactoring', 'code_review',
-      'test_design', 'experimentation', 'decision_making', 'retrospective',
-      'hypothesis_breakdown'
-    ];
-    return validPhases.includes(phase);
+    const validPhases = {
+      'business_exploration': '事業探索',
+      'requirement_definition': '要求定義', 
+      'value_hypothesis': '価値仮説',
+      'architecture_design': 'アーキテクチャ設計',
+      'prioritization': '優先度付け',
+      'estimation_planning': '見積もり・計画',
+      'implementation': '実装',
+      'debugging': 'デバッグ',
+      'refactoring': 'リファクタリング',
+      'code_review': 'コードレビュー',
+      'test_design': 'テスト設計',
+      'experimentation': '実験',
+      'decision_making': '意思決定',
+      'retrospective': '振り返り',
+      'hypothesis_breakdown': '仮説分解'
+    };
+    return phase in validPhases;
   }
 
   /**
-   * 思考法の妥当性確認
+   * 思考法の妥当性確認（拡張版）
    */
   private isValidMethod(method: string): boolean {
-    const validMethods = [
-      'abduction', 'logical', 'critical', 'mece', 'deductive',
-      'inductive', 'pac', 'meta', 'debate'
-    ];
-    return validMethods.includes(method);
+    const validMethods = {
+      'abduction': 'アブダクション（驚きから仮説形成）',
+      'logical': 'ロジカル（論点→結論の道筋）',
+      'critical': 'クリティカル（前提・論点・根拠を疑う）',
+      'mece': 'MECE（漏れなく重複なく分類）',
+      'deductive': '演繹的（一般→具体）',
+      'inductive': '帰納的（個別→共通パターン）',
+      'pac': 'PAC（前提・仮定・結論）',
+      'meta': 'メタ（思考プロセス評価）',
+      'debate': 'ディベート（賛成・反対論点）'
+    };
+    return method in validMethods;
+  }
+
+  /**
+   * 入力データの詳細バリデーション
+   */
+  private validateInputData(input: string, context: string): { isValid: boolean; error?: string; data?: Record<string, unknown> } {
+    // 空文字チェック
+    if (!input || input.trim().length === 0) {
+      return {
+        isValid: false,
+        error: `${context}の入力データが空です`
+      };
+    }
+
+    try {
+      const data = JSON.parse(input);
+      
+      // オブジェクト形式チェック
+      if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+        return {
+          isValid: false,
+          error: `${context}の入力データはJSONオブジェクト形式である必要があります`
+        };
+      }
+
+      // 最小限の内容チェック
+      const keys = Object.keys(data);
+      if (keys.length === 0) {
+        return {
+          isValid: false,
+          error: `${context}の入力データは空のオブジェクトです。少なくとも1つのフィールドが必要です`
+        };
+      }
+
+      return {
+        isValid: true,
+        data
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        isValid: false,
+        error: `${context}の入力データが無効なJSON形式です: ${errorMessage}`
+      };
+    }
   }
 
   /**

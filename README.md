@@ -39,9 +39,26 @@
 ### インストール
 
 ```bash
+# ライブラリとしてインストール
 pnpm install @53able/conflux
 # or
 npm install @53able/conflux
+
+# MCPサーバーとして使用
+npx @53able/conflux server
+
+# CLIツールとして使用
+npx @53able/conflux list
+```
+
+### 初回セットアップ
+
+```bash
+# 1. 思考法一覧を確認（API KEY不要）
+npx @53able/conflux list
+
+# 2. API KEYを設定して思考分析を試す
+OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux single critical '{"claim": "この実装で十分"}'
 ```
 
 > **推奨**: このプロジェクトは`pnpm`での使用を推奨しています。
@@ -52,73 +69,101 @@ npm install @53able/conflux
 
 実際の思考分析を行うには、LLMプロバイダーのAPIキーが必要です。
 
-#### 1. 環境設定ファイルの準備
+#### 方法1: 環境変数で設定（推奨）
 
+**CLIで使用する場合**:
 ```bash
-# .env.exampleを.envにコピー
-cp .env.example .env
+# 一時的に環境変数を設定して実行
+OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux single critical '{"claim": "この実装で十分"}'
+
+# または Anthropic
+ANTHROPIC_API_KEY=sk-ant-your-key-here npx @53able/conflux single critical '{"claim": "この実装で十分"}'
+
+# または Google Gemini
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-key npx @53able/conflux single critical '{"claim": "この実装で十分"}'
 ```
 
-#### 2. APIキーの取得と設定
-
-**OpenAI API Key**（推奨：gpt-4o）
-- [OpenAI Platform](https://platform.openai.com/api-keys)でAPIキーを取得
-- `.env`ファイルに設定:
-  ```bash
-  OPENAI_API_KEY=sk-proj-your-openai-api-key-here
-  OPENAI_MODEL=gpt-4o
-  ```
-
-**Anthropic API Key**（推奨：Claude 3.5 Sonnet）
-- [Anthropic Console](https://console.anthropic.com/)でAPIキーを取得
-- `.env`ファイルに設定:
-  ```bash
-  ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key-here
-  ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
-  ```
-
-#### 3. デフォルトプロバイダーの選択
-
+**永続的に設定する場合**:
 ```bash
-# .envファイルで設定
-DEFAULT_LLM_PROVIDER=anthropic  # or openai
+# .bashrc または .zshrc に追加
+export OPENAI_API_KEY=sk-proj-your-key-here
+export ANTHROPIC_API_KEY=sk-ant-your-key-here
+export GOOGLE_GENERATIVE_AI_API_KEY=your-google-key-here
+export DEFAULT_LLM_PROVIDER=openai  # or anthropic or google
+
+# 設定を反映
+source ~/.bashrc  # または source ~/.zshrc
 ```
 
-#### 4. 設定例（完全版）
+#### 方法2: .envファイルで設定
 
+**プロジェクトで使用する場合**:
+```bash
+# プロジェクトルートに.envファイルを作成
+echo "OPENAI_API_KEY=sk-proj-your-key-here" > .env
+echo "ANTHROPIC_API_KEY=sk-ant-your-key-here" >> .env
+echo "GOOGLE_GENERATIVE_AI_API_KEY=your-google-key-here" >> .env
+echo "DEFAULT_LLM_PROVIDER=openai" >> .env
+```
+
+**設定例（完全版）**:
 ```bash
 # LLM Provider API Keys
 OPENAI_API_KEY=sk-proj-your-key-here
 ANTHROPIC_API_KEY=sk-ant-your-key-here
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-api-key-here
 
 # Model Configuration  
-OPENAI_MODEL=gpt-4o
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+OPENAI_MODEL=gpt-5
+ANTHROPIC_MODEL=claude-sonnet-4-latest
+GOOGLE_MODEL=gemini-2.0-flash-exp
 
 # Default Provider
-DEFAULT_LLM_PROVIDER=anthropic
+DEFAULT_LLM_PROVIDER=openai
 
 # AI SDK v5 Settings (required for proper functioning)
 AI_SDK_DISABLE_TELEMETRY=true
 AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
 ```
 
+#### APIキーの取得方法
+
+**OpenAI API Key**（推奨：gpt-5）
+- [OpenAI Platform](https://platform.openai.com/api-keys)でAPIキーを取得
+
+**Anthropic API Key**（推奨：Claude Sonnet 4）
+- [Anthropic Console](https://console.anthropic.com/)でAPIキーを取得
+
+**Google Generative AI API Key**（推奨：Gemini 1.5 Pro）
+- [Google AI Studio](https://aistudio.google.com/app/apikey)でAPIキーを取得
+
 ### CLIでの動作確認
 
 ```bash
-# 思考法一覧の確認（API KEYなしでも動作）
-pnpm start list
+# 1. 思考法一覧の確認（API KEYなしでも動作）
+npx @53able/conflux list
 
-# 局面別推奨思考法（API KEYなしでも動作）
-pnpm start recommend debugging
+# 2. 局面別推奨思考法（API KEYなしでも動作）
+npx @53able/conflux recommend debugging
 
-# 実際の思考分析（API KEYが必要）
-pnpm start single abduction '{"surprisingFact": "APIが遅い"}'
+# 3. 実際の思考分析（API KEYが必要）
+# 環境変数を設定して実行
+OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux single abduction '{"surprisingFact": "APIが遅い"}'
+
+# Google Geminiを使用する場合
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-key npx @53able/conflux single abduction '{"surprisingFact": "APIが遅い"}'
+
+# または永続的に設定済みの場合
+npx @53able/conflux single abduction '{"surprisingFact": "APIが遅い"}'
 ```
+
+> **💡 ヒント**: 初回使用時は、まず`list`コマンドで思考法一覧を確認し、`recommend`コマンドで局面別推奨を確認してから、実際の思考分析を試してみてください。
 
 ## 📋 基本的な使用方法
 
-#### 1. 局面別思考プロセス
+### 1. ライブラリとして使用
+
+#### 局面別思考プロセス
 
 ```typescript
 import { ThinkingOrchestrator } from '@53able/conflux';
@@ -140,7 +185,7 @@ console.log(result.synthesis); // 統合分析結果
 console.log(result.actionItems); // 具体的なアクションアイテム
 ```
 
-#### 2. 黄金パターン（探索→実装）
+#### 黄金パターン（探索→実装）
 
 ```typescript
 // アブダクション→演繹→帰納→クリティカル→ロジカル→メタ→ディベートの統合フロー
@@ -153,7 +198,7 @@ const result = await orchestrator.processGoldenPattern(
 );
 ```
 
-#### 3. 単一思考法の使用
+#### 単一思考法の使用
 
 ```typescript
 // クリティカルシンキングで前提を疑う
@@ -167,7 +212,7 @@ const result = await orchestrator.processSingleMethod(
 );
 ```
 
-### コマンドライン使用
+### 2. コマンドライン使用
 
 ```bash
 # 局面別思考プロセス
@@ -200,7 +245,8 @@ Model Context Protocol準拠のサーバーとして他のAIツールと統合�
 
 ```bash
 # npx経由で起動（推奨）
-npx @53able/conflux server
+# API KEYは環境変数で設定
+OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux server
 
 # 開発時：npm scriptsで起動
 npm run mcp-server
@@ -208,6 +254,8 @@ npm run mcp-server
 # 開発時：tsxで直接実行
 npx tsx src/mcp/server.ts
 ```
+
+> **💡 注意**: MCPサーバーを起動する前に、環境変数でAPI KEYを設定してください。
 
 ### MCP設定例（Claude Desktop）
 
@@ -218,13 +266,49 @@ npx tsx src/mcp/server.ts
       "command": "npx",
       "args": ["@53able/conflux", "server"],
       "env": {
-        "OPENAI_API_KEY": "your-api-key",
-        "ANTHROPIC_API_KEY": "your-anthropic-key"
+        "OPENAI_API_KEY": "sk-proj-your-openai-api-key-here",
+        "OPENAI_MODEL": "gpt-5",
+        "ANTHROPIC_API_KEY": "sk-ant-your-anthropic-api-key-here",
+        "ANTHROPIC_MODEL": "claude-sonnet-4-latest",
+        "GOOGLE_GENERATIVE_AI_API_KEY": "your-google-api-key-here",
+        "GOOGLE_MODEL": "gemini-2.0-flash-exp",
+        "DEFAULT_LLM_PROVIDER": "openai",
+        "AI_SDK_DISABLE_TELEMETRY": "true",
+        "AI_SDK_VERCEL_AI_GATEWAY_DISABLED": "true"
       }
     }
   }
 }
 ```
+
+#### 環境変数の説明
+
+| 環境変数 | 説明 | 必須 | デフォルト |
+|---------|------|------|-----------|
+| `OPENAI_API_KEY` | OpenAI APIキー | 推奨 | - |
+| `OPENAI_MODEL` | 使用するOpenAIモデル | 任意 | `gpt-5` |
+| `ANTHROPIC_API_KEY` | Anthropic APIキー | 推奨 | - |
+| `ANTHROPIC_MODEL` | 使用するAnthropicモデル | 任意 | `claude-sonnet-4-latest` |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Google Generative AI APIキー | 任意 | - |
+| `GOOGLE_MODEL` | 使用するGoogleモデル | 任意 | `gemini-2.0-flash-exp` |
+| `DEFAULT_LLM_PROVIDER` | デフォルトのLLMプロバイダー | 任意 | `openai` |
+| `AI_SDK_DISABLE_TELEMETRY` | テレメトリを無効化 | 推奨 | `true` |
+| `AI_SDK_VERCEL_AI_GATEWAY_DISABLED` | Vercel AI Gatewayを無効化 | 推奨 | `true` |
+
+> **💡 ヒント**: 最低限、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、または`GOOGLE_GENERATIVE_AI_API_KEY`のいずれかを設定すれば動作します。複数設定すると、`DEFAULT_LLM_PROVIDER`で選択できます。
+
+#### 利用可能なモデル
+
+AI SDKでサポートされている最新のモデル一覧は、[AI SDK公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)で確認できます。
+
+**利用可能なプロバイダーとモデル**:
+- **OpenAI**: `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-chat-latest`, `gpt-4o`, `gpt-4o-mini`
+- **Anthropic**: `claude-sonnet-4-latest`, `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-latest`
+- **Google**: `gemini-2.0-flash-exp`, `gemini-1.5-flash`, `gemini-1.5-pro`
+- **OpenAI互換**: カスタムエンドポイント（`openai-compatible`タイプ）
+- **Mock**: 開発・テスト用（`mock`タイプ）
+
+> **📚 詳細**: 各プロバイダーの最新モデル一覧と機能比較は[AI SDK公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)を参照してください。
 
 ### Cursor / Claude Codeでの使用
 
@@ -238,8 +322,15 @@ npx tsx src/mcp/server.ts
       "command": "npx",
       "args": ["@53able/conflux", "server"],
       "env": {
-        "OPENAI_API_KEY": "your-api-key",
-        "ANTHROPIC_API_KEY": "your-anthropic-key"
+        "OPENAI_API_KEY": "sk-proj-your-openai-api-key-here",
+        "OPENAI_MODEL": "gpt-5",
+        "ANTHROPIC_API_KEY": "sk-ant-your-anthropic-api-key-here",
+        "ANTHROPIC_MODEL": "claude-sonnet-4-latest",
+        "GOOGLE_GENERATIVE_AI_API_KEY": "your-google-api-key-here",
+        "GOOGLE_MODEL": "gemini-2.0-flash-exp",
+        "DEFAULT_LLM_PROVIDER": "openai",
+        "AI_SDK_DISABLE_TELEMETRY": "true",
+        "AI_SDK_VERCEL_AI_GATEWAY_DISABLED": "true"
       }
     }
   }
@@ -254,8 +345,15 @@ npx tsx src/mcp/server.ts
       "command": "pnpm",
       "args": ["dlx", "@53able/conflux", "server"],
       "env": {
-        "OPENAI_API_KEY": "your-api-key",
-        "ANTHROPIC_API_KEY": "your-anthropic-key"
+        "OPENAI_API_KEY": "sk-proj-your-openai-api-key-here",
+        "OPENAI_MODEL": "gpt-5",
+        "ANTHROPIC_API_KEY": "sk-ant-your-anthropic-api-key-here",
+        "ANTHROPIC_MODEL": "claude-sonnet-4-latest",
+        "GOOGLE_GENERATIVE_AI_API_KEY": "your-google-api-key-here",
+        "GOOGLE_MODEL": "gemini-2.0-flash-exp",
+        "DEFAULT_LLM_PROVIDER": "openai",
+        "AI_SDK_DISABLE_TELEMETRY": "true",
+        "AI_SDK_VERCEL_AI_GATEWAY_DISABLED": "true"
       }
     }
   }
@@ -272,25 +370,17 @@ cd conflux
 # 依存関係のインストール（pnpm推奨）
 pnpm install
 
-# 型チェック
-pnpm run type-check
-
-# 開発サーバー起動
-pnpm run dev
+# ビルド
+pnpm run build
 
 # MCPサーバーとして起動
 pnpm run mcp-server
 # または
 npx @53able/conflux server
+
+# CLIツールとして使用
+npx @53able/conflux list
 ```
-
-### 利用可能なMCPツール
-
-- `process-phase` - 局面に応じた統合思考プロセス
-- `process-golden-pattern` - 黄金パターンの実行
-- `process-single-method` - 単一思考法の実行  
-- `list-thinking-methods` - 思考法一覧の取得
-- `get-phase-recommendations` - 局面別推奨の取得
 
 ## 📋 開発局面と推奨思考法
 
@@ -323,6 +413,9 @@ OPENAI_API_KEY=your-openai-api-key
 # Anthropic  
 ANTHROPIC_API_KEY=your-anthropic-api-key
 
+# Google
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-api-key
+
 # カスタムプロバイダー
 CUSTOM_LLM_BASE_URL=https://your-llm-endpoint.com/v1
 CUSTOM_LLM_API_KEY=your-custom-key
@@ -330,21 +423,40 @@ CUSTOM_LLM_API_KEY=your-custom-key
 
 ### LLMプロバイダー設定
 
+#### 環境変数での設定（推奨）
+
+```bash
+# 環境変数で設定（自動認識）
+OPENAI_API_KEY=your-openai-key
+ANTHROPIC_API_KEY=your-anthropic-key
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-key
+DEFAULT_LLM_PROVIDER=openai  # or anthropic or google
+```
+
+#### プログラムでの設定
+
 ```typescript
 import { globalLLMManager } from '@53able/conflux';
 
-// OpenAI GPT-4
-globalLLMManager.registerProvider('gpt4', {
+// OpenAI GPT-5（最新）
+globalLLMManager.registerProvider('gpt5', {
   type: 'openai',
-  model: 'gpt-4-turbo-preview',
+  model: 'gpt-5',
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Anthropic Claude
+// Anthropic Claude Sonnet 4（最新）
 globalLLMManager.registerProvider('claude', {
   type: 'anthropic', 
-  model: 'claude-3-sonnet-20240229',
+  model: 'claude-sonnet-4-latest',
   apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+// Google Gemini（最新）
+globalLLMManager.registerProvider('gemini', {
+  type: 'google', 
+  model: 'gemini-2.0-flash-exp',
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
 });
 
 // OpenAI互換API
@@ -355,6 +467,8 @@ globalLLMManager.registerProvider('custom', {
   apiKey: 'your-key',
 });
 ```
+
+> **📚 利用可能なモデル**: 本システムでサポートされているプロバイダーとモデル一覧は上記の通りです。各プロバイダーの最新モデル情報は[AI SDK公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)で確認できます。
 
 ## 📚 高度な使用方法
 
@@ -394,6 +508,33 @@ const implementation = await orchestrator.processPhase('implementation', {
   ...input,
   architecture: architecture.results,
 });
+```
+
+### MCPツールの活用
+
+MCPサーバーとして起動することで、他のAIツールと統合して高度な思考分析が可能です。
+
+#### 利用可能なMCPツール
+
+- `process-phase` - 局面に応じた統合思考プロセス
+- `process-golden-pattern` - 黄金パターンの実行
+- `process-single-method` - 単一思考法の実行  
+- `list-thinking-methods` - 思考法一覧の取得
+- `get-phase-recommendations` - 局面別推奨の取得
+
+#### 思考プロセスの連鎖
+
+MCPツールを組み合わせることで、複数の思考法を連鎖させた高度な分析が可能です。
+
+```bash
+# 1. 局面別推奨を取得
+npx @53able/conflux recommend debugging
+
+# 2. 推奨された思考法で分析
+npx @53able/conflux single abduction '{"surprisingFact": "APIが遅い"}'
+
+# 3. 黄金パターンで統合分析
+npx @53able/conflux golden '{"problem": "パフォーマンス問題の根本解決"}'
 ```
 
 ## 🤝 貢献

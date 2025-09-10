@@ -1,6 +1,6 @@
 {
   "name": "@53able/conflux",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Multi-agent thinking methodology MCP tools for strategic analysis and decision-making",
   "type": "module",
   "exports": {
@@ -47,6 +47,7 @@
   "license": "MIT",
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.15",
+    "@ai-sdk/google": "^2.0.13",
     "@ai-sdk/openai": "^2.0.27",
     "@ai-sdk/provider": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.0.0",

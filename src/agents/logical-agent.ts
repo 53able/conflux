@@ -1,4 +1,3 @@
-import { generateObject } from 'ai';
 import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
 import { 
   ThinkingMethodType, 
