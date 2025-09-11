@@ -174,6 +174,13 @@ export class LLMProviderManager {
   }
 
   /**
+   * LLMIntegrationを取得
+   */
+  getIntegration(): LLMIntegration {
+    return new LLMIntegration(this);
+  }
+
+  /**
    * デフォルトプロバイダーを設定
    */
   setDefaultProvider(name: string): void {
