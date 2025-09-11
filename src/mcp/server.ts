@@ -341,7 +341,6 @@ export class ThinkingMethodsMCPServer {
       
       const context = {
         llmProvider: globalLLMManager.getProvider(),
-      llmIntegration: globalLLMManager.getIntegration(),
         llmIntegration: globalLLMManager.getIntegration(),
         userId: parsed.userId || undefined,
         sessionId: `phase-${Date.now()}`,
@@ -411,7 +410,7 @@ export class ThinkingMethodsMCPServer {
       
       const context = {
         llmProvider: globalLLMManager.getProvider(),
-      llmIntegration: globalLLMManager.getIntegration(),
+        llmIntegration: globalLLMManager.getIntegration(),
         userId: parsed.userId || undefined,
         sessionId: `single-${Date.now()}`,
       };
