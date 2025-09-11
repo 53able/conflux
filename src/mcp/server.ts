@@ -341,6 +341,8 @@ export class ThinkingMethodsMCPServer {
       
       const context = {
         llmProvider: globalLLMManager.getProvider(),
+      llmIntegration: globalLLMManager.getIntegration(),
+        llmIntegration: globalLLMManager.getIntegration(),
         userId: parsed.userId || undefined,
         sessionId: `phase-${Date.now()}`,
       };
@@ -360,10 +362,14 @@ export class ThinkingMethodsMCPServer {
           },
         ],
       };
-    } catch (error) {
-      logger.error('Error in handleProcessPhase', { error, args });
-      throw error;
-    }
+      } catch (error) {
+        logger.error('Error in handleProcessPhase', { 
+          error: error instanceof Error ? error.message : 'Unknown error',
+          args,
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        throw error;
+      }
   }
 
   /**
@@ -374,6 +380,7 @@ export class ThinkingMethodsMCPServer {
     
     const context = {
       llmProvider: globalLLMManager.getProvider(),
+      llmIntegration: globalLLMManager.getIntegration(),
       userId: parsed.userId || undefined,
       sessionId: `golden-${Date.now()}`,
     };
@@ -404,6 +411,7 @@ export class ThinkingMethodsMCPServer {
       
       const context = {
         llmProvider: globalLLMManager.getProvider(),
+      llmIntegration: globalLLMManager.getIntegration(),
         userId: parsed.userId || undefined,
         sessionId: `single-${Date.now()}`,
       };
