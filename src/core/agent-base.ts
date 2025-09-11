@@ -178,7 +178,98 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
   }
 
   /**
-   * 自動復旧機能付きLLM呼び出しヘルパー
+   * AI SDKのgenerateObjectを使用した構造化出力保証メソッド
+   */
+  protected async callLLMWithStructuredOutput<T>(
+    schema: z.ZodSchema<T>,
+    systemPrompt: string,
+    userPrompt: string,
+    context: AgentContext,
+    options?: {
+      temperature?: number;
+      maxRetries?: number;
+      enableAutoRecovery?: boolean;
+    }
+  ): Promise<T> {
+    const maxRetries = options?.maxRetries ?? 3;
+    const enableAutoRecovery = options?.enableAutoRecovery ?? true;
+    
+    // LLMIntegrationが利用可能な場合は自動復旧機能を使用
+    if (context.llmIntegration && enableAutoRecovery) {
+      try {
+        return await context.llmIntegration.generateStructuredOutput<T>(
+          schema,
+          systemPrompt,
+          userPrompt,
+          undefined, // プロバイダー名はLLMIntegrationが自動選択
+          options
+        );
+      } catch (error) {
+        console.warn('LLMIntegration failed, falling back to direct AI SDK call:', error);
+        // フォールバック処理に続行
+      }
+    }
+
+    // AI SDKのgenerateObjectを直接使用（スキーマ保証）
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const { openai } = await import('@ai-sdk/openai');
+        const { anthropic } = await import('@ai-sdk/anthropic');
+        const { google } = await import('@ai-sdk/google');
+        
+        // デフォルトプロバイダー選択（OpenAI優先）
+        const defaultProvider = process.env.DEFAULT_LLM_PROVIDER || 'openai';
+        
+        let model;
+        if (defaultProvider === 'anthropic') {
+          const modelName = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-latest';
+          model = anthropic(modelName);
+        } else if (defaultProvider === 'google') {
+          const modelName = process.env.GOOGLE_MODEL || 'gemini-2.0-flash-exp';
+          model = google(modelName);
+        } else {
+          const modelName = process.env.OPENAI_MODEL || 'gpt-5';
+          model = openai(modelName);
+        }
+
+        // AI SDKのgenerateObjectを使用（スキーマ保証）
+        const result = await generateObject({
+          model: model as LanguageModel,
+          schema,
+          system: systemPrompt,
+          prompt: userPrompt,
+          temperature: options?.temperature ?? 0.3,
+        });
+
+        return result.object as T;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+        console.warn(`Structured output attempt ${attempt}/${maxRetries} failed:`, lastError.message);
+        
+        if (attempt < maxRetries) {
+          // 指数バックオフでリトライ間隔を調整
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    // すべてのリトライが失敗した場合
+    const errorMessage = lastError?.message || 'Unknown error';
+    console.error('Structured output failed after all retries:', {
+      error: errorMessage,
+      schema: schema.constructor.name,
+      systemPrompt: systemPrompt.substring(0, 100) + '...',
+      userPrompt: userPrompt.substring(0, 100) + '...',
+      attempts: maxRetries
+    });
+    throw new Error(`Structured output failed after ${maxRetries} attempts: ${errorMessage}`);
+  }
+
+  /**
+   * 自動復旧機能付きLLM呼び出しヘルパー（従来の方法）
    */
   protected async callLLMWithAutoRecovery<T>(
     schema: z.ZodSchema<T>,
@@ -191,50 +282,80 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
       enableAutoRecovery?: boolean;
     }
   ): Promise<T> {
+    const maxRetries = options?.maxRetries ?? 3;
+    const enableAutoRecovery = options?.enableAutoRecovery ?? true;
+    
     // LLMIntegrationが利用可能な場合は自動復旧機能を使用
-    if (context.llmIntegration) {
-      return await context.llmIntegration.generateStructuredOutput<T>(
-        schema,
-        systemPrompt,
-        userPrompt,
-        undefined, // プロバイダー名はLLMIntegrationが自動選択
-        options
-      );
-    }
-
-    // フォールバック：公式AI SDK v5パターンを直接使用
-    try {
-      const { openai } = await import('@ai-sdk/openai');
-      const { anthropic } = await import('@ai-sdk/anthropic');
-      const { google } = await import('@ai-sdk/google');
-      
-      // デフォルトプロバイダー選択（OpenAI優先）
-      const defaultProvider = process.env.DEFAULT_LLM_PROVIDER || 'openai';
-      
-      let model;
-      if (defaultProvider === 'anthropic') {
-        const modelName = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-latest';
-        model = anthropic(modelName);
-      } else if (defaultProvider === 'google') {
-        const modelName = process.env.GOOGLE_MODEL || 'gemini-2.0-flash-exp';
-        model = google(modelName);
-      } else {
-        const modelName = process.env.OPENAI_MODEL || 'gpt-5';
-        model = openai(modelName);
+    if (context.llmIntegration && enableAutoRecovery) {
+      try {
+        return await context.llmIntegration.generateStructuredOutput<T>(
+          schema,
+          systemPrompt,
+          userPrompt,
+          undefined, // プロバイダー名はLLMIntegrationが自動選択
+          options
+        );
+      } catch (error) {
+        console.warn('LLMIntegration failed, falling back to direct LLM call:', error);
+        // フォールバック処理に続行
       }
-
-      const result = await generateObject({
-        model: model as LanguageModel,
-        schema,
-        system: systemPrompt,
-        prompt: userPrompt,
-        temperature: options?.temperature ?? 0.3,
-      });
-
-      return result.object as T;
-    } catch (error) {
-      throw new Error(`LLM generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+
+    // リトライ機能付きフォールバック：公式AI SDK v5パターンを直接使用
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const { openai } = await import('@ai-sdk/openai');
+        const { anthropic } = await import('@ai-sdk/anthropic');
+        const { google } = await import('@ai-sdk/google');
+        
+        // デフォルトプロバイダー選択（OpenAI優先）
+        const defaultProvider = process.env.DEFAULT_LLM_PROVIDER || 'openai';
+        
+        let model;
+        if (defaultProvider === 'anthropic') {
+          const modelName = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-latest';
+          model = anthropic(modelName);
+        } else if (defaultProvider === 'google') {
+          const modelName = process.env.GOOGLE_MODEL || 'gemini-2.0-flash-exp';
+          model = google(modelName);
+        } else {
+          const modelName = process.env.OPENAI_MODEL || 'gpt-5';
+          model = openai(modelName);
+        }
+
+        const result = await generateObject({
+          model: model as LanguageModel,
+          schema,
+          system: systemPrompt,
+          prompt: userPrompt,
+          temperature: options?.temperature ?? 0.3,
+        });
+
+        return result.object as T;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+        console.warn(`LLM generation attempt ${attempt}/${maxRetries} failed:`, lastError.message);
+        
+        if (attempt < maxRetries) {
+          // 指数バックオフでリトライ間隔を調整
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    // すべてのリトライが失敗した場合
+    const errorMessage = lastError?.message || 'Unknown error';
+    console.error('LLM generation failed after all retries:', {
+      error: errorMessage,
+      schema: schema.constructor.name,
+      systemPrompt: systemPrompt.substring(0, 100) + '...',
+      userPrompt: userPrompt.substring(0, 100) + '...',
+      attempts: maxRetries
+    });
+    throw new Error(`LLM generation failed after ${maxRetries} attempts: ${errorMessage}`);
   }
 
   /**
