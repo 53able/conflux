@@ -23,8 +23,6 @@ interface CLIOptions {
   verbose?: boolean;
 }
 
-// コマンドハンドラーの型定義（将来の拡張用）
-// type CommandHandler = (options: CLIOptions) => Promise<void>;
 import { ThinkingMethodsMCPServer } from '../mcp/server.js';
 
 /**
