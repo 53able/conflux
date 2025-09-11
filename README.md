@@ -1,10 +1,11 @@
-# 🧠 Thinking Agents MCP
+# 🧠 Conflux - Thinking Agents MCP
 
 **Type-safe multi-agent thinking methodology tools for strategic analysis and decision-making**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6+-blue.svg)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/Version-0.2.0-brightgreen.svg)](https://github.com/53able/conflux)
 
 9つの構造化された思考法を組み合わせたマルチエージェントシステムで、開発の各局面に最適な意思決定と分析を支援します。
 
@@ -50,6 +51,9 @@ npx @53able/conflux server
 
 # CLIツールとして使用
 npx @53able/conflux list
+
+# バージョン確認
+npx @53able/conflux version
 ```
 
 ### 初回セットアップ
@@ -114,7 +118,7 @@ OPENAI_API_KEY=sk-proj-your-key-here
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 GOOGLE_GENERATIVE_AI_API_KEY=your-google-api-key-here
 
-# Model Configuration  
+# Model Configuration
 OPENAI_MODEL=gpt-5
 ANTHROPIC_MODEL=claude-sonnet-4-latest
 GOOGLE_MODEL=gemini-2.0-flash-exp
@@ -135,7 +139,7 @@ AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
 **Anthropic API Key**（推奨：Claude Sonnet 4）
 - [Anthropic Console](https://console.anthropic.com/)でAPIキーを取得
 
-**Google Generative AI API Key**（推奨：Gemini 1.5 Pro）
+**Google Generative AI API Key**（推奨：Gemini 2.0 Flash）
 - [Google AI Studio](https://aistudio.google.com/app/apikey)でAPIキーを取得
 
 ### CLIでの動作確認
@@ -344,11 +348,6 @@ AI SDK v5でサポートされている最新のモデル一覧は、[AI SDK v5�
       "args": ["@53able/conflux", "server"],
       "env": {
         "OPENAI_API_KEY": "sk-proj-your-openai-api-key-here",
-        "OPENAI_MODEL": "gpt-5",
-        "ANTHROPIC_API_KEY": "sk-ant-your-anthropic-api-key-here",
-        "ANTHROPIC_MODEL": "claude-sonnet-4-latest",
-        "GOOGLE_GENERATIVE_AI_API_KEY": "your-google-api-key-here",
-        "GOOGLE_MODEL": "gemini-2.0-flash-exp",
         "DEFAULT_LLM_PROVIDER": "openai",
         "AI_SDK_DISABLE_TELEMETRY": "true",
         "AI_SDK_VERCEL_AI_GATEWAY_DISABLED": "true"
@@ -367,11 +366,6 @@ AI SDK v5でサポートされている最新のモデル一覧は、[AI SDK v5�
       "args": ["dlx", "@53able/conflux", "server"],
       "env": {
         "OPENAI_API_KEY": "sk-proj-your-openai-api-key-here",
-        "OPENAI_MODEL": "gpt-5",
-        "ANTHROPIC_API_KEY": "sk-ant-your-anthropic-api-key-here",
-        "ANTHROPIC_MODEL": "claude-sonnet-4-latest",
-        "GOOGLE_GENERATIVE_AI_API_KEY": "your-google-api-key-here",
-        "GOOGLE_MODEL": "gemini-2.0-flash-exp",
         "DEFAULT_LLM_PROVIDER": "openai",
         "AI_SDK_DISABLE_TELEMETRY": "true",
         "AI_SDK_VERCEL_AI_GATEWAY_DISABLED": "true"
@@ -480,62 +474,30 @@ pnpm run dev
 
 ## ⚙️ 設定
 
-### 環境変数
+### 環境変数での設定（推奨）
 
 ```bash
-# OpenAI
-OPENAI_API_KEY=your-openai-api-key
-
-# Anthropic  
-ANTHROPIC_API_KEY=your-anthropic-api-key
-
-# Google
-GOOGLE_GENERATIVE_AI_API_KEY=your-google-api-key
-
-# カスタムプロバイダー
-CUSTOM_LLM_BASE_URL=https://your-llm-endpoint.com/v1
-CUSTOM_LLM_API_KEY=your-custom-key
-```
-
-### LLMプロバイダー設定
-
-#### 環境変数での設定（推奨）
-
-```bash
-# 環境変数で設定（自動認識）
+# 基本設定
 OPENAI_API_KEY=your-openai-key
 ANTHROPIC_API_KEY=your-anthropic-key
 GOOGLE_GENERATIVE_AI_API_KEY=your-google-key
 DEFAULT_LLM_PROVIDER=openai  # or anthropic or google
+
+# AI SDK v5設定（推奨）
+AI_SDK_DISABLE_TELEMETRY=true
+AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
+
+# ログ設定
+LOG_LEVEL=info
+NODE_ENV=production
 ```
 
-#### プログラムでの設定
+### プログラムでの設定
 
 ```typescript
 import { globalLLMManager } from '@53able/conflux';
 
-// OpenAI GPT-5（最新）
-globalLLMManager.registerProvider('gpt5', {
-  type: 'openai',
-  model: 'gpt-5',
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Anthropic Claude Sonnet 4（最新）
-globalLLMManager.registerProvider('claude', {
-  type: 'anthropic', 
-  model: 'claude-sonnet-4-latest',
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
-// Google Gemini（最新）
-globalLLMManager.registerProvider('gemini', {
-  type: 'google', 
-  model: 'gemini-2.0-flash-exp',
-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-});
-
-// OpenAI互換API
+// カスタムプロバイダーの登録例
 globalLLMManager.registerProvider('custom', {
   type: 'openai-compatible',
   baseURL: 'https://api.your-provider.com/v1',
@@ -544,7 +506,7 @@ globalLLMManager.registerProvider('custom', {
 });
 ```
 
-> **📚 利用可能なモデル**: 本システムでサポートされているプロバイダーとモデル一覧は上記の通りです。各プロバイダーの最新モデル情報は[AI SDK v5公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)で確認できます。
+> **📚 詳細**: 利用可能なモデル一覧と詳細な設定方法は[AI SDK v5公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)を参照してください。
 
 ## 📚 高度な使用方法
 
