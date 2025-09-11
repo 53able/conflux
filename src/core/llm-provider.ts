@@ -4,6 +4,7 @@ import { google } from '@ai-sdk/google';
 import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
 import 'dotenv/config';
+import { Logger } from './logger.js';
 
 /**
  * サポートするLLMプロバイダーの種類
@@ -282,6 +283,8 @@ export class LLMProviderManager {
  * 思考法エージェント向けの便利メソッドを提供
  */
 export class LLMIntegration {
+  private logger = Logger.getInstance();
+  
   constructor(private providerManager: LLMProviderManager) {}
 
   /**
@@ -318,9 +321,11 @@ export class LLMIntegration {
         if (this.isZodSchema(schema) && enableAutoRecovery) {
           const validation = schema.safeParse(result.object);
           if (!validation.success) {
-            console.error('Schema validation failed:');
-            console.error('Generated object:', JSON.stringify(result.object, null, 2));
-            console.error('Validation errors:', validation.error.issues);
+            this.logger.error('Schema validation failed:', {
+              generatedObject: result.object,
+              validationErrors: validation.error.issues,
+              error: validation.error.message
+            });
             throw new Error(`Schema validation failed: ${validation.error.message}`);
           }
         }
@@ -328,7 +333,11 @@ export class LLMIntegration {
         return result.object as T;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        console.warn(`LLM generation attempt ${attempt} failed:`, lastError.message);
+        this.logger.warn('LLM generation attempt failed', {
+          attempt,
+          maxRetries,
+          error: lastError.message
+        });
         
         // 自動復旧機能：エラー内容に応じてプロンプトを調整
         if (enableAutoRecovery && attempt < maxRetries) {
@@ -431,13 +440,16 @@ ${schemaInfo}
     
     for (const providerName of availableProviders) {
       try {
-        console.warn(`Trying fallback provider: ${providerName}`);
+        this.logger.warn('Trying fallback provider', { providerName });
         return await this.generateStructuredOutput<T>(
           schema, systemPrompt, userPrompt, providerName, 
           { ...options, maxRetries: 1, enableAutoRecovery: false }
         );
       } catch (error) {
-        console.warn(`Fallback provider ${providerName} also failed:`, error);
+        this.logger.warn('Fallback provider failed', { 
+          providerName, 
+          error: error instanceof Error ? error.message : String(error) 
+        });
         continue;
       }
     }
@@ -472,7 +484,11 @@ ${schemaInfo}
 
         return result.text;
       } catch (error) {
-        console.warn(`LLM text generation attempt ${attempt} failed:`, error);
+        this.logger.warn('LLM text generation attempt failed', {
+          attempt,
+          maxRetries,
+          error: error instanceof Error ? error.message : String(error)
+        });
         
         if (attempt === maxRetries) {
           throw new Error(`LLM text generation failed after ${maxRetries} attempts: ${error}`);
@@ -506,8 +522,11 @@ ${schemaInfo}
           providerName,
           { ...options, maxRetries: 1 }
         );
-      } catch (_error) {
-        console.warn(`Provider ${providerName} failed, trying next...`);
+      } catch (error) {
+        this.logger.warn('Provider failed, trying next', {
+          providerName,
+          error: error instanceof Error ? error.message : String(error)
+        });
         continue;
       }
     }
