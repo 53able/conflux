@@ -14,6 +14,7 @@ import {
   IntegratedThinkingResult,
   ThinkingResult
 } from '../schemas/thinking.js';
+import { Logger } from '../core/logger.js';
 
 /**
  * CLIオプションの型定義
@@ -31,9 +32,11 @@ import { ThinkingMethodsMCPServer } from '../mcp/server.js';
  */
 class ThinkingCLI {
   private orchestrator: ThinkingOrchestrator;
+  private logger = Logger.getInstance();
 
   constructor() {
     this.orchestrator = new ThinkingOrchestrator();
+    this.logger.info('ThinkingCLI initialized');
   }
 
   /**
@@ -207,6 +210,8 @@ class ThinkingCLI {
       { name: 'debate', description: '賛成・反対の論点を体系的に検討' },
     ];
 
+    this.logger.info('Listing available thinking methods', { methodCount: methods.length });
+    
     console.log(chalk.blue.bold('利用可能な思考法:'));
     console.log('');
 
@@ -217,6 +222,7 @@ class ThinkingCLI {
 
   private async handleRecommendCommand(config: { phase: string; verbose?: boolean }): Promise<void> {
       if (!this.isValidPhase(config.phase)) {
+      this.logger.warn('Invalid phase specified', { phase: config.phase });
       console.error(chalk.red('無効な局面が指定されました'));
       this.printValidPhases();
       return;
@@ -252,9 +258,16 @@ class ThinkingCLI {
 
     const rec = recommendations[config.phase];
     if (!rec) {
+      this.logger.warn('No recommendations available for phase', { phase: config.phase });
       console.log(chalk.yellow('この局面の推奨情報は準備中です'));
       return;
     }
+
+    this.logger.info('Displaying phase recommendations', { 
+      phase: config.phase, 
+      primary: rec.primary, 
+      secondary: rec.secondary 
+    });
 
     console.log(chalk.blue.bold(`局面: ${config.phase}`));
     console.log(chalk.gray(`目的: ${rec.purpose}`));
@@ -265,10 +278,15 @@ class ThinkingCLI {
 
   private async handleServerCommand(_config: { verbose?: boolean }): Promise<void> {
     try {
+      this.logger.info('Starting MCP Server');
       console.log(chalk.cyan('🚀 Starting MCP Server...'));
       const server = new ThinkingMethodsMCPServer();
       await server.start();
     } catch (error) {
+      this.logger.error('Failed to start MCP server', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       console.error(chalk.red('❌ Failed to start MCP server:'));
       if (error instanceof Error) {
         console.error(chalk.red(error.message));
@@ -426,6 +444,12 @@ class ThinkingCLI {
    * エラーハンドリング
    */
   private handleError(error: unknown, verbose: boolean): void {
+    this.logger.error('CLI error occurred', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      verbose
+    });
+    
     if (verbose) {
       console.error(chalk.red('詳細エラー:'), error);
     } else {
@@ -443,4 +467,11 @@ async function main() {
 }
 
 // メイン実行（npxでも確実に動作するように）
-main().catch(console.error);
+main().catch((error) => {
+  const logger = Logger.getInstance();
+  logger.error('Main execution failed', {
+    error: error instanceof Error ? error.message : 'Unknown error',
+    stack: error instanceof Error ? error.stack : undefined
+  });
+  console.error(error);
+});

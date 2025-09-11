@@ -8,6 +8,7 @@ import {
   MetaOutput
 } from '../schemas/thinking.js';
 import { type IThinkingAgent, type AgentContext } from '../core/agent-base.js';
+import { Logger } from '../core/logger.js';
 
 // 思考法エージェントのインポート
 import { AbductionAgent } from '../agents/abduction-agent.js';
@@ -137,9 +138,13 @@ const GOLDEN_PATTERN_SEQUENCE: ThinkingMethodType[] = [
  */
 export class ThinkingOrchestrator {
   private agents: Map<ThinkingMethodType, IThinkingAgent> = new Map();
+  private logger = Logger.getInstance();
 
   constructor() {
     this.initializeAgents();
+    this.logger.info('ThinkingOrchestrator initialized', { 
+      agentCount: this.agents.size 
+    });
   }
 
   /**
@@ -196,7 +201,12 @@ export class ThinkingOrchestrator {
           
           // エラーが発生した場合の処理
           if (result.status === 'failed') {
-            console.warn(`Agent ${methodType} failed: ${result.reasoning}`);
+            this.logger.warn('Agent execution failed', {
+              methodType,
+              reasoning: result.reasoning,
+              phase,
+              strategy
+            });
           }
         }
       } else {
@@ -219,7 +229,12 @@ export class ThinkingOrchestrator {
 
     } catch (error) {
       // エラー処理
-      console.error(`Orchestration failed for phase ${phase}:`, error);
+      this.logger.error('Orchestration failed', {
+        phase,
+        strategy,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return this.createFailureResult(phase, strategy, error instanceof Error ? error.message : 'Unknown error');
     }
   }
@@ -233,8 +248,10 @@ export class ThinkingOrchestrator {
   ): Promise<IntegratedThinkingResult> {
     const results: ThinkingResult[] = [];
     let currentInput = initialInput;
+    const goldenPattern = GOLDEN_PATTERN_SEQUENCE;
 
-    for (const methodType of GOLDEN_PATTERN_SEQUENCE) {
+    for (let i = 0; i < goldenPattern.length; i++) {
+      const methodType = goldenPattern[i];
       const agent = this.agents.get(methodType);
       if (!agent) continue;
 
@@ -249,7 +266,12 @@ export class ThinkingOrchestrator {
         
         // 失敗した場合はスキップして次へ
         if (result.status === 'failed') {
-          console.warn(`Golden pattern step ${methodType} failed, continuing...`);
+          this.logger.warn('Golden pattern step failed, continuing', {
+            methodType,
+            reasoning: result.reasoning,
+            step: i + 1,
+            totalSteps: goldenPattern.length
+          });
           continue;
         }
         
@@ -259,7 +281,13 @@ export class ThinkingOrchestrator {
         }
         
       } catch (error) {
-        console.error(`Golden pattern step ${methodType} error:`, error);
+        this.logger.error('Golden pattern step error', {
+          methodType,
+          step: i + 1,
+          totalSteps: goldenPattern.length,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
       }
     }
 
