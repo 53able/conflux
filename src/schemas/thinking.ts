@@ -167,14 +167,13 @@ export type InductiveInput = z.infer<typeof InductiveInput>;
  * 帰納的思考の出力
  */
 export const InductiveOutput = z.object({
-  generalizations: z.array(z.object({
-    pattern: z.string(),
+  patterns: z.array(z.object({
+    description: z.string(),
     confidence: z.number().min(0).max(1),
-    supportingEvidence: z.array(z.string()),
-    exceptions: z.array(z.string()).optional(),
+    evidence: z.array(z.string()),
   })),
   sampleSize: z.number(),
-  biasWarnings: z.array(z.string()).optional(),
+  limitations: z.array(z.string()).optional(),
 });
 
 export type InductiveOutput = z.infer<typeof InductiveOutput>;
