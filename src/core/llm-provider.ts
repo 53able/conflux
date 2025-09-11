@@ -30,7 +30,7 @@ export interface MockProvider {
 }
 
 /**
- * Zodスキーマの型定義
+ * Zodスキーマの型定義（Zod公式推奨）
  */
 export type ZodSchema = z.ZodType<unknown>;
 
@@ -46,6 +46,9 @@ export interface GenerationOptions {
   temperature?: number;
   maxRetries?: number;
   enableAutoRecovery?: boolean;
+  mode?: 'auto' | 'json' | 'tool';
+  schemaName?: string;
+  schemaDescription?: string;
 }
 
 /**
@@ -298,18 +301,26 @@ export class LLMIntegration {
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const result = await generateObject({
+        const generateObjectOptions = {
           model: provider as LanguageModel,
           schema: schema as ZodSchema,
           system: systemPrompt,
           prompt: userPrompt,
           temperature: options?.temperature ?? 0.3,
-        });
+          mode: options?.mode ?? 'auto',
+          ...(options?.schemaName && { schemaName: options.schemaName }),
+          ...(options?.schemaDescription && { schemaDescription: options.schemaDescription }),
+        } as Parameters<typeof generateObject>[0];
+
+        const result = await generateObject(generateObjectOptions);
 
         // スキーマ検証（Zodスキーマの場合）
         if (this.isZodSchema(schema) && enableAutoRecovery) {
           const validation = schema.safeParse(result.object);
           if (!validation.success) {
+            console.error('Schema validation failed:');
+            console.error('Generated object:', JSON.stringify(result.object, null, 2));
+            console.error('Validation errors:', validation.error.issues);
             throw new Error(`Schema validation failed: ${validation.error.message}`);
           }
         }
@@ -375,8 +386,8 @@ ${schemaInfo}
     try {
       if (this.isZodSchema(schema)) {
         // Zodスキーマの場合
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return `Zodスキーマ型: ${(schema as any)._def?.typeName || 'Object'}`;
+        const schemaTypeName = this.getZodSchemaTypeName(schema);
+        return `Zodスキーマ型: ${schemaTypeName}`;
       }
       return 'JSONスキーマに準拠してください';
     } catch {
@@ -385,10 +396,24 @@ ${schemaInfo}
   }
 
   /**
-   * Zodスキーマかどうかを判定
+   * Zodスキーマの型名を取得（型安全）
+   */
+  private getZodSchemaTypeName(schema: ZodSchema): string {
+    // Zodスキーマの内部構造にアクセスする型安全な方法
+    const schemaWithDef = schema as { _def?: { typeName?: string } };
+    return schemaWithDef._def?.typeName || 'Object';
+  }
+
+  /**
+   * Zodスキーマかどうかを判定（型安全）
    */
   private isZodSchema(schema: Schema): schema is ZodSchema {
-    return typeof schema === 'object' && schema !== null && '_def' in schema;
+    return (
+      typeof schema === 'object' && 
+      schema !== null && 
+      '_def' in schema &&
+      typeof (schema as { _def?: unknown })._def === 'object'
+    );
   }
 
   /**

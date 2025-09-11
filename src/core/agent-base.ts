@@ -8,6 +8,7 @@ import {
 } from '../schemas/thinking.js';
 import type { LLMProvider, LanguageModel } from './llm-provider.js';
 import { LLMIntegration } from './llm-provider.js';
+import { Logger } from './logger.js';
 
 /**
  * エージェント実行コンテキスト
@@ -65,8 +66,14 @@ export interface IThinkingAgent {
  */
 export abstract class BaseThinkingAgent implements IThinkingAgent {
   abstract readonly capability: AgentCapability;
+  protected logger = Logger.getInstance();
 
-  constructor(protected config?: Record<string, unknown>) {}
+  constructor(protected config?: Record<string, unknown>) {
+    // capabilityは抽象プロパティなので、サブクラスで初期化後にログを出力
+    this.logger.debug('BaseThinkingAgent initialized', {
+      config: this.config
+    });
+  }
 
   /**
    * メイン思考プロセス実行
@@ -120,7 +127,12 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
       };
 
     } catch (error) {
-      console.error(`Error in ${this.capability.methodType} agent:`, error);
+      this.logger.error('Agent execution error', {
+        methodType: this.capability.methodType,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        input: _input
+      });
       return this.createFailureResult(_input, error instanceof Error ? error.message : 'Unknown error');
     }
   }
@@ -178,6 +190,56 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
   }
 
   /**
+   * ZodスキーマからJSON例を動的生成
+   */
+  public generateSchemaExample<T>(schema: z.ZodType<T>): string {
+    const jsonSchema = z.toJSONSchema(schema);
+    const example = this.createExampleFromJSONSchema(jsonSchema);
+    return JSON.stringify(example, null, 2);
+  }
+
+  private createExampleFromJSONSchema(jsonSchema: Record<string, unknown>): Record<string, unknown> {
+    if (jsonSchema.type === 'object') {
+      const example: Record<string, unknown> = {};
+      
+      const properties = jsonSchema.properties as Record<string, unknown> | undefined;
+      if (properties) {
+        for (const [key, property] of Object.entries(properties)) {
+          example[key] = this.createExampleFromProperty(property);
+        }
+      }
+      
+      return example;
+    }
+    
+    return this.createExampleFromProperty(jsonSchema) as Record<string, unknown>;
+  }
+
+  private createExampleFromProperty(property: unknown): unknown {
+    if (typeof property === 'object' && property !== null) {
+      const prop = property as Record<string, unknown>;
+      
+      if (prop.type === 'array') {
+        const itemExample = this.createExampleFromProperty(prop.items);
+        return [itemExample];
+      } else if (prop.type === 'object') {
+        return this.createExampleFromJSONSchema(prop);
+      } else if (prop.type === 'string') {
+        // 説明がある場合はそれを使用、なければデフォルト
+        return prop.description || "例: 文字列";
+      } else if (prop.type === 'number') {
+        const examples = prop.examples as unknown[] | undefined;
+        return examples?.[0] || 0.8;
+      } else if (prop.type === 'integer') {
+        const examples = prop.examples as unknown[] | undefined;
+        return examples?.[0] || 1;
+      }
+    }
+    
+    return "例: 値";
+  }
+
+  /**
    * AI SDKのgenerateObjectを使用した構造化出力保証メソッド
    */
   protected async callLLMWithStructuredOutput<T>(
@@ -189,6 +251,9 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
       temperature?: number;
       maxRetries?: number;
       enableAutoRecovery?: boolean;
+      mode?: 'auto' | 'json' | 'tool';
+      schemaName?: string;
+      schemaDescription?: string;
     }
   ): Promise<T> {
     const maxRetries = options?.maxRetries ?? 3;
@@ -205,7 +270,10 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
           options
         );
       } catch (error) {
-        console.warn('LLMIntegration failed, falling back to direct AI SDK call:', error);
+        this.logger.warn('LLMIntegration failed, falling back to direct AI SDK call', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
         // フォールバック処理に続行
       }
     }
@@ -235,18 +303,33 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
         }
 
         // AI SDKのgenerateObjectを使用（スキーマ保証）
-        const result = await generateObject({
+        const generateObjectOptions: Parameters<typeof generateObject>[0] = {
           model: model as LanguageModel,
           schema,
           system: systemPrompt,
           prompt: userPrompt,
           temperature: options?.temperature ?? 0.3,
-        });
+          mode: options?.mode ?? 'auto',
+        };
+
+        if (options?.schemaName) {
+          generateObjectOptions.schemaName = options.schemaName;
+        }
+        if (options?.schemaDescription) {
+          generateObjectOptions.schemaDescription = options.schemaDescription;
+        }
+
+        const result = await generateObject(generateObjectOptions);
 
         return result.object as T;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown error');
-        console.warn(`Structured output attempt ${attempt}/${maxRetries} failed:`, lastError.message);
+        this.logger.warn('Structured output attempt failed', {
+          attempt,
+          maxRetries,
+          error: lastError.message,
+          schema: schema.constructor.name
+        });
         
         if (attempt < maxRetries) {
           // 指数バックオフでリトライ間隔を調整
@@ -258,7 +341,7 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
     
     // すべてのリトライが失敗した場合
     const errorMessage = lastError?.message || 'Unknown error';
-    console.error('Structured output failed after all retries:', {
+    this.logger.error('Structured output failed after all retries', {
       error: errorMessage,
       schema: schema.constructor.name,
       systemPrompt: systemPrompt.substring(0, 100) + '...',
