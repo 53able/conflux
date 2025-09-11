@@ -256,7 +256,10 @@ export class ThinkingOrchestrator {
       if (!agent) continue;
 
       try {
-        const result = await agent.think(currentInput, {
+        // 入力形式を変換
+        const convertedInput = this.convertInputForMethod(methodType, currentInput, 'business_exploration');
+        
+        const result = await agent.think(convertedInput, {
           ...context,
           previousResults: results,
           metadata: { ...context.metadata, goldenPattern: true },
@@ -450,42 +453,38 @@ export class ThinkingOrchestrator {
 
   /**
    * 思考法に応じた入力形式変換
+   * 各思考法のスキーマ要件に適合するように入力データを変換する
    */
   private convertInputForMethod(
     methodType: ThinkingMethodType,
     input: Record<string, unknown>,
     phase: DevelopmentPhase
   ): Record<string, unknown> {
-    const { problem, context, ...otherInputs } = input;
+    // 入力データから有用な情報を抽出
+    const { 
+      problem, 
+      context, 
+      surprisingFact,
+      majorPremise,
+      minorPremise,
+      question,
+      claim,
+      proposition,
+      observations,
+      purpose,
+      items,
+      currentThinking,
+      objective,
+      evidence,
+      constraints,
+      proposedCriteria,
+      ...otherInputs 
+    } = input;
     
     switch (methodType) {
-      case 'logical':
-        return {
-          question: problem || '論点を設定してください',
-          information: context ? [context as string] : [],
-          constraints: [],
-          ...otherInputs,
-        };
-      
-      case 'critical':
-        return {
-          claim: problem || '検証すべき主張',
-          evidence: context ? [context as string] : [],
-          context: context as string || '',
-          ...otherInputs,
-        };
-      
-      case 'mece':
-        return {
-          purpose: problem || '分類の目的',
-          items: context ? [context as string] : [],
-          proposedCriteria: '',
-          ...otherInputs,
-        };
-      
       case 'abduction':
         return {
-          surprisingFact: problem || '驚くべき事実',
+          surprisingFact: surprisingFact || problem || '驚くべき事実',
           context: context as string || '',
           domain: phase,
           ...otherInputs,
@@ -493,36 +492,60 @@ export class ThinkingOrchestrator {
       
       case 'deductive':
         return {
-          majorPremise: problem || '大前提',
-          minorPremise: context as string || '小前提',
+          majorPremise: majorPremise || problem || '大前提',
+          minorPremise: minorPremise || context as string || '小前提',
           domain: phase,
+          ...otherInputs,
+        };
+      
+      case 'logical':
+        return {
+          question: question || problem || '論点を設定してください',
+          information: evidence || (context ? [context as string] : []),
+          constraints: constraints || [],
+          ...otherInputs,
+        };
+      
+      case 'critical':
+        return {
+          claim: claim || problem || '検証すべき主張',
+          evidence: evidence || (context ? [context as string] : []),
+          context: context as string || '',
+          ...otherInputs,
+        };
+      
+      case 'mece':
+        return {
+          purpose: purpose || problem || '分類の目的',
+          items: items || (context ? [context as string] : []),
+          proposedCriteria: proposedCriteria || '',
           ...otherInputs,
         };
       
       case 'inductive':
         return {
-          observations: context ? [context as string] : [],
+          observations: observations || (context ? [context as string] : []),
           context: problem as string || '',
           ...otherInputs,
         };
       
       case 'pac':
         return {
-          claim: problem || '検証すべき主張',
+          claim: claim || problem || '検証すべき主張',
           context: context as string || '',
           ...otherInputs,
         };
       
       case 'meta':
         return {
-          currentThinking: problem as string || '現在の思考内容',
-          objective: context as string || '目的・目標',
+          currentThinking: currentThinking || problem as string || '現在の思考内容',
+          objective: objective || context as string || '目的・目標',
           ...otherInputs,
         };
       
       case 'debate':
         return {
-          proposition: problem || '論題（〇〇すべき形式）',
+          proposition: proposition || problem || '論題（〇〇すべき形式）',
           context: context as string || '',
           ...otherInputs,
         };
