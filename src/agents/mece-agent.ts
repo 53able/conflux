@@ -40,8 +40,8 @@ export class MECEAgent extends BaseThinkingAgent {
     const promptTemplate = new MECEPromptTemplate();
     const { system, user } = promptTemplate.generatePrompts(typedInput);
 
-    // 自動復旧機能付きでLLMを呼び出し
-    const result = await this.callLLMWithAutoRecovery(
+    // AI SDKのgenerateObjectを使用してスキーマ保証
+    const result = await this.callLLMWithStructuredOutput(
       MECEOutput,
       system,
       user,
@@ -97,7 +97,9 @@ MECEの手順:
 - Mutually Exclusive: 各カテゴリが相互排他的（重複なし）
 - Collectively Exhaustive: 全体を網羅している（漏れなし）
 - 分類軸は目的に対して意味がある変数を選択
-- 粒度を揃える（同じレベルの抽象度で分類）`;
+- 粒度を揃える（同じレベルの抽象度で分類）
+
+出力は必ず指定されたスキーマに従ってください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

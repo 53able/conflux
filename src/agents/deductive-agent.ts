@@ -39,8 +39,8 @@ export class DeductiveThinkingAgent extends BaseThinkingAgent {
     const promptTemplate = new DeductivePromptTemplate();
     const { system, user } = promptTemplate.generatePrompts(input);
 
-    // 自動復旧機能付きでLLMを呼び出し
-    const result = await this.callLLMWithAutoRecovery(
+    // AI SDKのgenerateObjectを使用してスキーマ保証
+    const result = await this.callLLMWithStructuredOutput(
       DeductiveOutput,
       system,
       user,
@@ -94,7 +94,9 @@ class DeductivePromptTemplate extends LLMPromptTemplate {
 - 論理的妥当性の検証（論理構造が正しいか）
 - 前提の真実性の評価（前提が実際に正しいか）
 - 結論の含意の明確化（結論が何を意味するか）
-- 前提の脆弱性の認識（前提が崩れる条件）`;
+- 前提の脆弱性の認識（前提が崩れる条件）
+
+出力は必ず指定されたスキーマに従ってください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

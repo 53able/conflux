@@ -24,8 +24,8 @@ export class MetaThinkingAgent extends BaseThinkingAgent {
     const promptTemplate = new MetaPromptTemplate();
     const { system, user } = promptTemplate.generatePrompts(input);
 
-    // 自動復旧機能付きでLLMを呼び出し
-    const result = await this.callLLMWithAutoRecovery(
+    // AI SDKのgenerateObjectを使用してスキーマ保証
+    const result = await this.callLLMWithStructuredOutput(
       MetaOutput,
       system,
       user,
@@ -61,9 +61,11 @@ class MetaPromptTemplate extends LLMPromptTemplate {
 
 分析観点:
 1. 現在のプロセスの妥当性評価
-2. より効果的なアプローチの提案  
+2. より効果的なアプローチの提案
 3. 思考の思考による質的向上
-4. 評価基準・成功指標の再定義`;
+4. 評価基準・成功指標の再定義
+
+出力は必ず指定されたスキーマに従ってください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

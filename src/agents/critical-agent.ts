@@ -48,8 +48,8 @@ export class CriticalThinkingAgent extends BaseThinkingAgent {
     const promptTemplate = new CriticalThinkingPromptTemplate();
     const { system, user } = promptTemplate.generatePrompts(typedInput);
 
-    // 自動復旧機能付きでLLMを呼び出し
-    const result = await this.callLLMWithAutoRecovery(
+    // AI SDKのgenerateObjectを使用してスキーマ保証
+    const result = await this.callLLMWithStructuredOutput(
       CriticalOutput,
       system,
       user,

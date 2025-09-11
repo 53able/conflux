@@ -23,8 +23,8 @@ export class PACThinkingAgent extends BaseThinkingAgent {
     const promptTemplate = new PACPromptTemplate();
     const { system, user } = promptTemplate.generatePrompts(input);
 
-    // 自動復旧機能付きでLLMを呼び出し
-    const result = await this.callLLMWithAutoRecovery(
+    // AI SDKのgenerateObjectを使用してスキーマ保証
+    const result = await this.callLLMWithStructuredOutput(
       PACOutput,
       system,
       user,
@@ -62,7 +62,9 @@ PAC思考の構造:
 分析の重点:
 1. 仮定(A)の妥当性検証 - 時代変化で無効になっていないか
 2. 前提(P)の信頼性検証 - 個人の解釈で美化されていないか
-3. 検証方法の提示 - 仮定を実験で壊せる形に`;
+3. 検証方法の提示 - 仮定を実験で壊せる形に
+
+出力は必ず指定されたスキーマに従ってください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

@@ -23,8 +23,8 @@ export class DebateThinkingAgent extends BaseThinkingAgent {
     const promptTemplate = new DebatePromptTemplate();
     const { system, user } = promptTemplate.generatePrompts(input);
 
-    // 自動復旧機能付きでLLMを呼び出し
-    const result = await this.callLLMWithAutoRecovery(
+    // AI SDKのgenerateObjectを使用してスキーマ保証
+    const result = await this.callLLMWithStructuredOutput(
       DebateOutput,
       system,
       user,
@@ -85,7 +85,9 @@ class DebatePromptTemplate extends LLMPromptTemplate {
 - 両論併記での公平な検討
 - 根拠の強度と妥当性の評価
 - 見えていなかった争点の発見
-- 感情的にならず論理的に`;
+- 感情的にならず論理的に
+
+出力は必ず指定されたスキーマに従ってください。`;
   }
 
   protected getUserPrompt(input: unknown): string {
