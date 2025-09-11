@@ -3,7 +3,8 @@ import {
   ThinkingMethodType, 
   PACInput, 
   PACOutput,
-  DevelopmentPhase 
+  DevelopmentPhase, 
+  ThinkingResult
 } from '../schemas/thinking.js';
 
 export class PACThinkingAgent extends BaseThinkingAgent {
@@ -50,6 +51,45 @@ export class PACThinkingAgent extends BaseThinkingAgent {
     const testMethodScore = Math.min(pacOutput.assumptions_validity.testMethods.length * 0.05, 0.2);
     
     return Math.min(assumptionValidityScore + premiseReliabilityScore + testMethodScore, 1.0);
+  }
+
+  /**
+   * PAC思考の推論説明生成
+   */
+  protected override generateReasoningExplanation(
+    input: unknown, 
+    output: Record<string, unknown>, 
+    _context: AgentContext
+  ): string {
+    const typedInput = input as { claim: string };
+    const typedOutput = output as PACOutput;
+    
+    const assumptionValidity = typedOutput.assumptions_validity.isValid ? '有効' : '無効';
+    const premiseReliability = typedOutput.premise_validity.isReliable ? '信頼できる' : '要検証';
+    
+    return `「${typedInput.claim}」をPAC構造に分解し、前提・仮定・結論の妥当性を検証しました。前提: ${premiseReliability}、仮定: ${assumptionValidity}。検証方法${typedOutput.assumptions_validity.testMethods.length}個を提示し、仮説の構造的妥当性を体系的に評価しています。`;
+  }
+
+  /**
+   * PAC思考後の次ステップ推奨
+   */
+  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
+    const baseRecommendations = super.getNextRecommendations(result, phase);
+    
+    // PAC思考後は検証の実行が重要
+    const pacSpecific: ThinkingMethodType[] = ['critical'];
+    
+    // 仮説の検証には演繹的思考も有効
+    if (phase === 'hypothesis_breakdown') {
+      pacSpecific.push('deductive');
+    }
+    
+    // 振り返りでは論理的構造化も重要
+    if (phase === 'retrospective') {
+      pacSpecific.push('logical');
+    }
+
+    return [...new Set([...pacSpecific, ...baseRecommendations])];
   }
 }
 

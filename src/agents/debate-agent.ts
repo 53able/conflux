@@ -3,7 +3,8 @@ import {
   ThinkingMethodType, 
   DebateInput, 
   DebateOutput,
-  DevelopmentPhase 
+  DevelopmentPhase, 
+  ThinkingResult
 } from '../schemas/thinking.js';
 
 export class DebateThinkingAgent extends BaseThinkingAgent {
@@ -70,6 +71,28 @@ export class DebateThinkingAgent extends BaseThinkingAgent {
     const typedOutput = output as DebateOutput;
     
     return `「${typedInput.proposition}」についてディベート思考を実施。賛成論点${typedOutput.proArguments.length}個、反対論点${typedOutput.conArguments.length}個を検討し、${typedOutput.keyDisputes.length}個の主要争点を特定しました。最終判断: ${typedOutput.recommendation.decision}（${typedOutput.recommendation.reasoning}）`;
+  }
+
+  /**
+   * ディベート思考後の次ステップ推奨
+   */
+  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
+    const baseRecommendations = super.getNextRecommendations(result, phase);
+    
+    // ディベート思考後は決定の実行が重要
+    const debateSpecific: ThinkingMethodType[] = ['meta'];
+    
+    // 論点の検証にはクリティカル思考も有効
+    if (phase === 'architecture_design') {
+      debateSpecific.push('critical');
+    }
+    
+    // 意思決定の実行には論理的思考も重要
+    if (phase === 'decision_making') {
+      debateSpecific.push('logical');
+    }
+
+    return [...new Set([...debateSpecific, ...baseRecommendations])];
   }
 }
 

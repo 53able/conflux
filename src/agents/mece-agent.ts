@@ -3,7 +3,8 @@ import {
   ThinkingMethodType, 
   MECEInput, 
   MECEOutput,
-  DevelopmentPhase 
+  DevelopmentPhase, 
+  ThinkingResult
 } from '../schemas/thinking.js';
 
 /**
@@ -83,6 +84,28 @@ export class MECEAgent extends BaseThinkingAgent {
     const typedOutput = output as MECEOutput;
     
     return `「${typedInput.purpose}」を目的として、${typedInput.items.length}個の項目を「${typedOutput.criteria}」の基準で分類しました。結果: ${typedOutput.categories.length}カテゴリに整理、完全性スコア${(typedOutput.completenessScore * 100).toFixed(1)}%。漏れ${typedOutput.gaps.length}個、重複${typedOutput.overlaps.length}個を特定し、MECEの原則に沿って構造化を行いました。`;
+  }
+
+  /**
+   * MECE思考後の次ステップ推奨
+   */
+  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
+    const baseRecommendations = super.getNextRecommendations(result, phase);
+    
+    // MECE思考後は論理的構造化が重要
+    const meceSpecific: ThinkingMethodType[] = ['logical'];
+    
+    // 分類結果の検証にはクリティカル思考も有効
+    if (phase === 'code_review' || phase === 'refactoring') {
+      meceSpecific.push('critical');
+    }
+    
+    // 優先順位付けでは各カテゴリの評価が必要
+    if (phase === 'prioritization') {
+      meceSpecific.push('meta');
+    }
+
+    return [...new Set([...meceSpecific, ...baseRecommendations])];
   }
 }
 

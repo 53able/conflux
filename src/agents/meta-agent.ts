@@ -3,7 +3,8 @@ import {
   ThinkingMethodType, 
   MetaInput, 
   MetaOutput,
-  DevelopmentPhase 
+  DevelopmentPhase, 
+  ThinkingResult
 } from '../schemas/thinking.js';
 
 export class MetaThinkingAgent extends BaseThinkingAgent {
@@ -51,6 +52,44 @@ export class MetaThinkingAgent extends BaseThinkingAgent {
     const alternativeScore = Math.min(metaOutput.alternativeApproaches.length * 0.05, 0.2);
     
     return Math.min(processEffectiveness * 0.5 + recommendationScore + alternativeScore, 1.0);
+  }
+
+  /**
+   * メタ思考の推論説明生成
+   */
+  protected override generateReasoningExplanation(
+    input: unknown, 
+    output: Record<string, unknown>, 
+    _context: AgentContext
+  ): string {
+    const typedInput = input as { currentThinking: string; objective: string };
+    const typedOutput = output as MetaOutput;
+    
+    const effectivenessPercent = (typedOutput.processEvaluation.effectiveness * 100).toFixed(1);
+    
+    return `「${typedInput.objective}」を目的として、現在の思考プロセス「${typedInput.currentThinking}」をメタレベルで分析しました。プロセス有効性: ${effectivenessPercent}%、改善提案${typedOutput.recommendations.length}個、代替アプローチ${typedOutput.alternativeApproaches.length}個を生成。思考プロセス自体を対象化し、より高次の視点から評価・改善を行いました。`;
+  }
+
+  /**
+   * メタ思考後の次ステップ推奨
+   */
+  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
+    const baseRecommendations = super.getNextRecommendations(result, phase);
+    
+    // メタ思考後は具体的な実装が重要
+    const metaSpecific: ThinkingMethodType[] = ['logical'];
+    
+    // 改善提案の実装にはクリティカル思考も有効
+    if (phase === 'retrospective' || phase === 'estimation_planning') {
+      metaSpecific.push('critical');
+    }
+    
+    // 意思決定段階ではディベート思考も有効
+    if (phase === 'decision_making') {
+      metaSpecific.push('debate');
+    }
+
+    return [...new Set([...metaSpecific, ...baseRecommendations])];
   }
 }
 

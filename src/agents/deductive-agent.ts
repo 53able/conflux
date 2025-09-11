@@ -3,7 +3,8 @@ import {
   ThinkingMethodType, 
   DeductiveInput, 
   DeductiveOutput,
-  DevelopmentPhase 
+  DevelopmentPhase, 
+  ThinkingResult
 } from '../schemas/thinking.js';
 
 /**
@@ -81,6 +82,28 @@ export class DeductiveThinkingAgent extends BaseThinkingAgent {
     const reliabilityPercent = (typedOutput.validityCheck.premiseReliability * 100).toFixed(1);
     
     return `大前提「${typedInput.majorPremise}」と小前提「${typedInput.minorPremise}」から演繹的に導出しました。論理的妥当性: ${validityText}、前提信頼性: ${reliabilityPercent}%。結論「${typedOutput.conclusion}」は${typedOutput.implications.length}個の含意を持ちます。`;
+  }
+
+  /**
+   * 演繹的思考後の次ステップ推奨
+   */
+  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
+    const baseRecommendations = super.getNextRecommendations(result, phase);
+    
+    // 演繹思考後は前提の検証が重要
+    const deductiveSpecific: ThinkingMethodType[] = ['critical'];
+    
+    // 結論の検証には帰納的思考も有効
+    if (phase === 'debugging' || phase === 'experimentation') {
+      deductiveSpecific.push('inductive');
+    }
+    
+    // アーキテクチャ設計では論理的構造化も重要
+    if (phase === 'architecture_design') {
+      deductiveSpecific.push('logical');
+    }
+
+    return [...new Set([...deductiveSpecific, ...baseRecommendations])];
   }
 }
 

@@ -3,7 +3,8 @@ import {
   ThinkingMethodType, 
   InductiveInput, 
   InductiveOutput,
-  DevelopmentPhase 
+  DevelopmentPhase, 
+  ThinkingResult
 } from '../schemas/thinking.js';
 
 export class InductiveThinkingAgent extends BaseThinkingAgent {
@@ -51,6 +52,46 @@ export class InductiveThinkingAgent extends BaseThinkingAgent {
     const sampleSizeBonus = Math.min(inductiveOutput.sampleSize * 0.02, 0.3);
     
     return Math.min(avgConfidence + sampleSizeBonus, 1.0);
+  }
+
+  /**
+   * 帰納的思考の推論説明生成
+   */
+  protected override generateReasoningExplanation(
+    input: unknown, 
+    output: Record<string, unknown>, 
+    _context: AgentContext
+  ): string {
+    const typedInput = input as { observations: string[] };
+    const typedOutput = output as InductiveOutput;
+    
+    const topGeneralization = typedOutput.generalizations.reduce((best, current) => 
+      current.confidence > best.confidence ? current : best
+    );
+    
+    return `「${typedInput.observations.length}個の観察データ」から帰納的に分析し、${typedOutput.generalizations.length}個の一般化を発見しました。最も信頼度の高い一般化は「${topGeneralization.pattern}」（信頼度: ${(topGeneralization.confidence * 100).toFixed(1)}%）です。サンプルサイズ: ${typedOutput.sampleSize}、バイアス警告: ${typedOutput.biasWarnings?.length || 0}個を特定しています。`;
+  }
+
+  /**
+   * 帰納的思考後の次ステップ推奨
+   */
+  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
+    const baseRecommendations = super.getNextRecommendations(result, phase);
+    
+    // 帰納思考後は仮説の検証が重要
+    const inductiveSpecific: ThinkingMethodType[] = ['deductive', 'critical'];
+    
+    // 価値仮説の検証にはアブダクションも有効
+    if (phase === 'value_hypothesis') {
+      inductiveSpecific.push('abduction');
+    }
+    
+    // 実験段階ではメタ思考でプロセス改善
+    if (phase === 'experimentation') {
+      inductiveSpecific.push('meta');
+    }
+
+    return [...new Set([...inductiveSpecific, ...baseRecommendations])];
   }
 }
 
