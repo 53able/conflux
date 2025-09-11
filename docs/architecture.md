@@ -4,6 +4,10 @@
 
 Confluxは、9つの構造化された思考法を組み合わせたマルチエージェントシステムで、開発の各局面に最適な意思決定と分析を支援するTypeScriptライブラリです。Model Context Protocol (MCP)準拠で、AI開発環境との統合を実現しています。
 
+**バージョン**: 0.2.0  
+**パッケージ名**: @53able/conflux  
+**リポジトリ**: https://github.com/53able/conflux
+
 ## アーキテクチャ全体図
 
 ```mermaid
@@ -116,6 +120,7 @@ class ThinkingOrchestrator {
 - 入力検証、前処理、LLM実行、後処理の一貫した流れ
 - 自動復旧機能付きLLM呼び出し
 - エラーハンドリングと失敗時の適切な処理
+- AI SDK v5との完全統合
 
 **実装パターン**:
 ```typescript
@@ -125,6 +130,9 @@ abstract class BaseThinkingAgent implements IThinkingAgent {
   
   // サブクラスで実装必須
   protected abstract executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>>
+  
+  // AI SDK v5のgenerateObjectを使用した構造化出力保証
+  protected async callLLMWithStructuredOutput<T>(...)
   
   // 自動復旧機能付きLLM呼び出し
   protected async callLLMWithAutoRecovery<T>(...)
@@ -147,6 +155,8 @@ abstract class BaseThinkingAgent implements IThinkingAgent {
 - フォールバック機能
 - レート制限対応
 - 環境変数ベースの自動設定
+- AI SDK v5との完全統合
+- 自動復旧機能付きLLM呼び出し
 
 ### 4. LLMIntegration（LLM統合）
 
@@ -158,6 +168,8 @@ abstract class BaseThinkingAgent implements IThinkingAgent {
 - 複数プロバイダーでのフォールバック
 - 指数バックオフによる再試行
 - プロバイダー健康チェック
+- AI SDK v5のgenerateObjectとの統合
+- Zodスキーマベースの型安全性保証
 
 ## 思考法エージェント詳細
 
@@ -388,9 +400,15 @@ conflux server
 ```json
 {
   "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "strict": true,
     "noImplicitAny": true,
-    "exactOptionalPropertyTypes": true
+    "exactOptionalPropertyTypes": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
   }
 }
 ```
@@ -400,6 +418,8 @@ conflux server
 - any型完全禁止
 - 未使用変数検出
 - 一貫した命名規則
+- TypeScript v5.6対応
+- ESLint v9対応
 
 ### テスト戦略
 
