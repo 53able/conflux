@@ -102,3 +102,6 @@ coverage/
 
 # MCP server logs
 mcp-server.log
+
+# Unsaved file directory
+unsaved
