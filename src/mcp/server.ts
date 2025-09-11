@@ -311,6 +311,13 @@ export class ThinkingMethodsMCPServer {
     });
 
     process.on('uncaughtException', (error) => {
+      // JSONパースエラーの特別処理
+      if (error instanceof SyntaxError && error.message.includes('JSON')) {
+        logger.error('JSON Parse Error:', { error: error.message });
+        console.error('JSON Parse Error:', error.message);
+        // JSONパースエラーの場合は再起動ではなく、エラーレスポンスを返す
+        return;
+      }
       logger.error('Uncaught Exception', { error });
       console.error('Uncaught Exception:', error);
       process.exit(1);
