@@ -2,10 +2,14 @@
 
 This document provides instructions on how to set up and configure the MCP server for the Conflux project.
 
+**バージョン**: 0.2.0  
+**パッケージ名**: @53able/conflux
+
 ## Prerequisites
 
 - Docker 20.10+ and Docker Compose 2.0+ installed on your machine
 - Node.js 20+ and pnpm (for local development)
+- TypeScript 5.6+ (for development)
 
 ## Setup Methods
 
@@ -105,6 +109,7 @@ docker compose --env-file .env.docker up -d --build
 | `NODE_ENV` | Environment | Optional | `production` |
 | `AI_SDK_DISABLE_TELEMETRY` | Disable telemetry | Recommended | `true` |
 | `AI_SDK_VERCEL_AI_GATEWAY_DISABLED` | Disable Vercel AI Gateway | Recommended | `true` |
+| `LOG_LEVEL` | Log level | Optional | `info` |
 
 ### MCP Server Features
 
@@ -112,6 +117,8 @@ docker compose --env-file .env.docker up -d --build
 - **自動復旧**: LLMレスポンスのスキーマ不一致時の自動修正
 - **ログ機能**: Winstonによる構造化ログ出力
 - **エラーハンドリング**: 包括的なエラー処理とログ記録
+- **AI SDK v5統合**: 最新のAI SDKとの完全統合
+- **型安全性**: TypeScript + Zodスキーマによる完全な型安全性
 
 ## Integration with AI Tools
 

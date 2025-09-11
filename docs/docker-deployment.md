@@ -2,10 +2,14 @@
 
 Conflux MCPサーバーをDockerコンテナとしてデプロイする方法を説明します。
 
+**バージョン**: 0.2.0  
+**パッケージ名**: @53able/conflux
+
 ## 前提条件
 
 - Docker 20.10以上
 - Docker Compose 2.0以上
+- Node.js 20以上（ローカル開発時）
 
 ## 環境変数の設定
 
@@ -24,6 +28,14 @@ OPENAI_API_KEY=your_openai_api_key_here
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
 DEFAULT_LLM_PROVIDER=openai
+
+# AI SDK v5設定（推奨）
+AI_SDK_DISABLE_TELEMETRY=true
+AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
+
+# ログ設定
+LOG_LEVEL=info
+NODE_ENV=production
 ```
 
 ## デプロイメント方法
@@ -62,6 +74,9 @@ docker run -it --rm \
 | `GOOGLE_GENERATIVE_AI_API_KEY` | Google APIキー | - |
 | `DEFAULT_LLM_PROVIDER` | デフォルトLLMプロバイダー | `openai` |
 | `NODE_ENV` | 実行環境 | `production` |
+| `AI_SDK_DISABLE_TELEMETRY` | AI SDKテレメトリ無効化 | `true` |
+| `AI_SDK_VERCEL_AI_GATEWAY_DISABLED` | Vercel AI Gateway無効化 | `true` |
+| `LOG_LEVEL` | ログレベル | `info` |
 
 ### Docker Compose設定
 
