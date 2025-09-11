@@ -141,7 +141,7 @@ export class Logger {
   public static reset(): void {
     if (Logger.instance) {
       Logger.instance.close();
-      Logger.instance = null as any;
+      Logger.instance = null as unknown as winston.Logger;
       Logger.isInitialized = false;
     }
   }
