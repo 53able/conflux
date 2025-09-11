@@ -2,12 +2,21 @@ version: '3.8'
 
 services:
   mcp-server:
-    build: .
-    ports:
-      - "3000:3000"
+    build: 
+      context: .
+      target: production
     environment:
       - NODE_ENV=production
-    volumes:
-      - .:/app
-    command: ["node", "dist/mcp-server.js"]
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-openai}
+      - AI_SDK_DISABLE_TELEMETRY=true
+      - AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
+    # MCP server runs on stdio, no port exposure needed
+    # volumes:
+    #   - ./logs:/app/logs  # Uncomment if you want to persist logs
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
 
