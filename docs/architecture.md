@@ -474,6 +474,169 @@ globalLLMManager.registerProvider('custom', {
 - 出力サニタイゼーション
 - 機密情報の保護
 
+## Docker環境でのアーキテクチャ
+
+### コンテナ化戦略
+
+Confluxは本番環境での使用に最適化されたDockerコンテナを提供します。
+
+#### マルチステージビルド
+
+```dockerfile
+# ビルドステージ
+FROM node:20-alpine AS builder
+RUN npm install -g pnpm
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm run build
+
+# 本番ステージ
+FROM node:20-alpine AS production
+RUN npm install -g pnpm
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod
+COPY --from=builder /app/dist ./dist
+RUN addgroup -g 1001 -S nodejs && adduser -S conflux -u 1001
+RUN chown -R conflux:nodejs /app
+USER conflux
+CMD ["node", "dist/mcp/server.js"]
+```
+
+#### セキュリティ設計
+
+- **非rootユーザー実行**: `conflux`ユーザーでの実行
+- **最小権限の原則**: 必要最小限の依存関係のみ
+- **Alpine Linux**: 軽量でセキュアなベースイメージ
+- **マルチステージビルド**: 本番イメージのサイズ最適化
+
+#### Docker Compose設定
+
+```yaml
+version: '3.8'
+services:
+  mcp-server:
+    build: 
+      context: .
+      target: production
+    environment:
+      - NODE_ENV=production
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-openai}
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+```
+
+### デプロイメントパターン
+
+#### 1. 単一コンテナデプロイメント
+
+```bash
+# 直接実行
+docker run -it --rm \
+  -e OPENAI_API_KEY=your_key \
+  conflux-mcp
+
+# バックグラウンド実行
+docker run -d --name conflux-mcp \
+  -e OPENAI_API_KEY=your_key \
+  conflux-mcp
+```
+
+#### 2. Docker Composeデプロイメント
+
+```bash
+# 開発環境
+docker compose --env-file .env.docker up --build
+
+# 本番環境
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+#### 3. Kubernetesデプロイメント
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conflux-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: conflux-mcp
+  template:
+    metadata:
+      labels:
+        app: conflux-mcp
+    spec:
+      containers:
+      - name: conflux-mcp
+        image: conflux-mcp:latest
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: conflux-secrets
+              key: openai-api-key
+        stdin: true
+        tty: true
+```
+
+### ログとモニタリング
+
+#### Winstonログ設定
+
+```typescript
+const logger = createLogger({
+  level: 'info',
+  format: format.combine(
+    format.timestamp(),
+    format.errors({ stack: true }),
+    format.json()
+  ),
+  transports: [
+    new transports.Console(),
+    new transports.File({ filename: 'mcp-server.log' })
+  ]
+});
+```
+
+#### ヘルスチェック
+
+```yaml
+healthcheck:
+  test: ["CMD", "node", "-e", "process.exit(0)"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+```
+
+### パフォーマンス最適化
+
+#### リソース制限
+
+```yaml
+deploy:
+  resources:
+    limits:
+      memory: 512M
+      cpus: '0.5'
+    reservations:
+      memory: 256M
+      cpus: '0.25'
+```
+
+#### キャッシュ戦略
+
+- **Docker Layer Caching**: 依存関係のキャッシュ
+- **pnpm Cache**: パッケージマネージャーのキャッシュ
+- **Build Cache**: TypeScriptコンパイルのキャッシュ
+
 ## 今後の拡張方向
 
 1. **新規思考法の追加**
@@ -481,7 +644,9 @@ globalLLMManager.registerProvider('custom', {
 3. **多言語サポート**
 4. **可視化機能**
 5. **学習機能の追加**
+6. **Kubernetesネイティブサポート**
+7. **マイクロサービス化**
 
 ---
 
-このアーキテクチャは、構造化された思考プロセスを支援する堅牢で拡張可能なシステムを提供します。
+このアーキテクチャは、構造化された思考プロセスを支援する堅牢で拡張可能なシステムを提供します。Docker環境での本番運用に最適化されており、スケーラブルでセキュアなデプロイメントを実現します。

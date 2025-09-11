@@ -18,6 +18,7 @@
 - **🎨 美しいCLI**: Commander.jsベースの直感的なコマンドライン
 - **🔗 LLM統合**: AI SDK v5で複数のLLMプロバイダーをサポート
 - **🛠 自動復旧**: スキーマ不一致やエラー時の自動復旧機能搭載
+- **🐳 Docker対応**: 本番環境向けのDockerコンテナ化とマルチステージビルド
 - **🏢 エンタープライズ対応**: Cursor、Claude Codeなどの開発環境で使用可能
 
 ## 🧠 思考法エージェント
@@ -243,6 +244,8 @@ Model Context Protocol準拠のサーバーとして他のAIツールと統合�
 
 ### サーバー起動
 
+#### 方法1: npx経由（推奨）
+
 ```bash
 # npx経由で起動（推奨）
 # API KEYは環境変数で設定
@@ -255,7 +258,25 @@ npm run mcp-server
 npx tsx src/mcp/server.ts
 ```
 
+#### 方法2: Docker経由
+
+```bash
+# Dockerイメージをビルド
+docker build -t conflux-mcp .
+
+# 環境変数を指定して実行
+docker run -it --rm \
+  -e OPENAI_API_KEY=your_api_key \
+  -e DEFAULT_LLM_PROVIDER=openai \
+  conflux-mcp
+
+# Docker Composeで起動（推奨）
+docker compose --env-file .env.docker up --build
+```
+
 > **💡 注意**: MCPサーバーを起動する前に、環境変数でAPI KEYを設定してください。
+
+> **🐳 Docker**: 本番環境での使用にはDockerコンテナでの実行を推奨します。詳細は[Docker Deployment Guide](docs/docker-deployment.md)を参照してください。
 
 ### MCP設定例（Claude Desktop）
 
@@ -387,6 +408,24 @@ npx @53able/conflux server
 # CLIツールとして使用
 npx @53able/conflux list
 ```
+
+#### Docker環境でのセットアップ
+
+```bash
+# Dockerイメージをビルド
+docker build -t conflux-mcp .
+
+# 環境変数ファイルを作成
+echo "OPENAI_API_KEY=your-key-here" > .env.docker
+
+# Docker Composeで起動
+docker compose --env-file .env.docker up --build
+
+# 開発用（ホットリロード）
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+> **📚 詳細**: Docker環境での詳細な設定方法は[Docker Deployment Guide](docs/docker-deployment.md)を参照してください。
 
 ### コード品質と型安全性
 
