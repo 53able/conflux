@@ -17,6 +17,23 @@ import {
   ThinkingMethodType, 
   DevelopmentPhase
 } from '../schemas/thinking.js';
+import { createLogger, transports, format } from 'winston';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+// Logger setup
+const logger = createLogger({
+  level: 'info',
+  format: format.combine(
+    format.timestamp(),
+    format.json()
+  ),
+  transports: [
+    new transports.Console(),
+    new transports.File({ filename: 'mcp-server.log' })
+  ]
+});
 
 /**
  * MCPツールの入力スキーマ定義
@@ -234,7 +251,17 @@ export class ThinkingMethodsMCPServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
+      logger.info('Tool request received', { name, args });
+
       try {
+        // 入力データの基本検証
+        if (!args || typeof args !== 'object') {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            'Invalid input provided: arguments must be an object'
+          );
+        }
+
         switch (name) {
           case 'process-phase':
             return await this.handleProcessPhase(args);
@@ -254,9 +281,11 @@ export class ThinkingMethodsMCPServer {
         }
       } catch (error) {
         if (error instanceof McpError) {
+          logger.error(`MCP Error: ${error.message}`, { error, name, args });
           throw error;
         }
         
+        logger.error(`Internal Error: ${error instanceof Error ? error.message : 'Unknown error'}`, { error, name, args });
         throw new McpError(
           ErrorCode.InternalError,
           `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -270,13 +299,27 @@ export class ThinkingMethodsMCPServer {
    */
   private setupErrorHandlers(): void {
     this.server.onerror = (error) => {
+      logger.error('[MCP Server Error]', { error });
       console.error('[MCP Server Error]', error);
     };
 
     process.on('SIGINT', async () => {
+      logger.info('Shutting down MCP server...');
       console.log('Shutting down MCP server...');
       await this.server.close();
       process.exit(0);
+    });
+
+    process.on('uncaughtException', (error) => {
+      logger.error('Uncaught Exception', { error });
+      console.error('Uncaught Exception:', error);
+      process.exit(1);
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+      logger.error('Unhandled Rejection', { reason, promise });
+      console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+      process.exit(1);
     });
   }
 
@@ -284,28 +327,36 @@ export class ThinkingMethodsMCPServer {
    * 局面別思考プロセス実行ハンドラー
    */
   private async handleProcessPhase(args: unknown) {
-    const parsed = ProcessPhaseInputSchema.parse(args);
-    
-    const context = {
-      llmProvider: globalLLMManager.getProvider(),
-      userId: parsed.userId || undefined,
-      sessionId: `phase-${Date.now()}`,
-    };
+    try {
+      logger.info('Processing phase request', { args });
+      const parsed = ProcessPhaseInputSchema.parse(args);
+      logger.info('Phase input parsed successfully', { parsed });
+      
+      const context = {
+        llmProvider: globalLLMManager.getProvider(),
+        userId: parsed.userId || undefined,
+        sessionId: `phase-${Date.now()}`,
+      };
 
-    const result = await this.orchestrator.processPhase(
-      parsed.phase,
-      parsed.input,
-      context
-    );
+      const result = await this.orchestrator.processPhase(
+        parsed.phase,
+        parsed.input,
+        context
+      );
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
+      logger.info('Phase processing completed', { result });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error('Error in handleProcessPhase', { error, args });
+      throw error;
+    }
   }
 
   /**
@@ -339,28 +390,36 @@ export class ThinkingMethodsMCPServer {
    * 単一思考法実行ハンドラー
    */
   private async handleProcessSingleMethod(args: unknown) {
-    const parsed = ProcessSingleMethodInputSchema.parse(args);
-    
-    const context = {
-      llmProvider: globalLLMManager.getProvider(),
-      userId: parsed.userId || undefined,
-      sessionId: `single-${Date.now()}`,
-    };
+    try {
+      logger.info('Processing single method request', { args });
+      const parsed = ProcessSingleMethodInputSchema.parse(args);
+      logger.info('Single method input parsed successfully', { parsed });
+      
+      const context = {
+        llmProvider: globalLLMManager.getProvider(),
+        userId: parsed.userId || undefined,
+        sessionId: `single-${Date.now()}`,
+      };
 
-    const result = await this.orchestrator.processSingleMethod(
-      parsed.method,
-      parsed.input,
-      context
-    );
+      const result = await this.orchestrator.processSingleMethod(
+        parsed.method,
+        parsed.input,
+        context
+      );
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
+      logger.info('Single method processing completed', { result });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error('Error in handleProcessSingleMethod', { error, args });
+      throw error;
+    }
   }
 
   /**
@@ -486,7 +545,7 @@ export class ThinkingMethodsMCPServer {
   async start(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Thinking Methods MCP Server running on stdio');
+    console.error(`Thinking Methods MCP Server running on stdio, port: ${process.env.PORT || 3000}`);
   }
 }
 
