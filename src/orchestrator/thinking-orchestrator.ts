@@ -177,8 +177,11 @@ export class ThinkingOrchestrator {
           const agent = this.agents.get(methodType);
           if (!agent) continue;
           
+          // 入力形式を変換
+          const convertedInput = this.convertInputForMethod(methodType, currentInput, phase);
+          
           // エージェントを実行
-          const result = await agent.think(currentInput, {
+          const result = await agent.think(convertedInput, {
             ...context,
             previousResults: results,
             metadata: { ...context.metadata, phase },
@@ -200,7 +203,10 @@ export class ThinkingOrchestrator {
         // 並列実行（主要思考法のみ）
         const primaryAgent = this.agents.get(strategy.primary);
         if (primaryAgent) {
-          const result = await primaryAgent.think(initialInput, {
+          // 入力形式を変換
+          const convertedInput = this.convertInputForMethod(strategy.primary, initialInput, phase);
+          
+          const result = await primaryAgent.think(convertedInput, {
             ...context,
             metadata: { ...context.metadata, phase },
           });
@@ -412,6 +418,90 @@ export class ThinkingOrchestrator {
     }
     
     return [...new Set(nextSteps)].slice(0, 5); // 重複除去と上位5個に限定
+  }
+
+  /**
+   * 思考法に応じた入力形式変換
+   */
+  private convertInputForMethod(
+    methodType: ThinkingMethodType,
+    input: Record<string, unknown>,
+    phase: DevelopmentPhase
+  ): Record<string, unknown> {
+    const { problem, context, ...otherInputs } = input;
+    
+    switch (methodType) {
+      case 'logical':
+        return {
+          question: problem || '論点を設定してください',
+          information: context ? [context as string] : [],
+          constraints: [],
+          ...otherInputs,
+        };
+      
+      case 'critical':
+        return {
+          claim: problem || '検証すべき主張',
+          evidence: context ? [context as string] : [],
+          context: context as string || '',
+          ...otherInputs,
+        };
+      
+      case 'mece':
+        return {
+          purpose: problem || '分類の目的',
+          items: context ? [context as string] : [],
+          proposedCriteria: '',
+          ...otherInputs,
+        };
+      
+      case 'abduction':
+        return {
+          surprisingFact: problem || '驚くべき事実',
+          context: context as string || '',
+          domain: phase,
+          ...otherInputs,
+        };
+      
+      case 'deductive':
+        return {
+          majorPremise: problem || '大前提',
+          minorPremise: context as string || '小前提',
+          domain: phase,
+          ...otherInputs,
+        };
+      
+      case 'inductive':
+        return {
+          observations: context ? [context as string] : [],
+          context: problem as string || '',
+          ...otherInputs,
+        };
+      
+      case 'pac':
+        return {
+          claim: problem || '検証すべき主張',
+          context: context as string || '',
+          ...otherInputs,
+        };
+      
+      case 'meta':
+        return {
+          currentThinking: problem as string || '現在の思考内容',
+          objective: context as string || '目的・目標',
+          ...otherInputs,
+        };
+      
+      case 'debate':
+        return {
+          proposition: problem || '論題（〇〇すべき形式）',
+          context: context as string || '',
+          ...otherInputs,
+        };
+      
+      default:
+        return input;
+    }
   }
 
   /**
