@@ -42,7 +42,7 @@ export class LogicalThinkingAgent extends BaseThinkingAgent {
    */
   protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
     const typedInput = input as { question: string; information?: string[]; constraints?: string[] };
-    const promptTemplate = new LogicalThinkingPromptTemplate();
+    const promptTemplate = new LogicalThinkingPromptTemplate(this);
     const { system, user } = promptTemplate.generatePrompts(typedInput);
 
     // AI SDKのgenerateObjectを使用してスキーマ保証
@@ -55,6 +55,9 @@ export class LogicalThinkingAgent extends BaseThinkingAgent {
         temperature: 0.3, // 論理的思考なので創造性よりも一貫性を重視
         maxRetries: 3,
         enableAutoRecovery: true,
+        schemaName: 'LogicalOutput',
+        schemaDescription: 'ロジカル思考の分析結果を表す構造化データ',
+        mode: 'json',
       }
     );
 
@@ -125,7 +128,13 @@ export class LogicalThinkingAgent extends BaseThinkingAgent {
  * ロジカルシンキング思考用のプロンプトテンプレート
  */
 class LogicalThinkingPromptTemplate extends LLMPromptTemplate {
+  constructor(private agent: LogicalThinkingAgent) {
+    super();
+  }
+
   protected getSystemPrompt(): string {
+    const schemaExample = this.agent.generateSchemaExample(LogicalOutput);
+    
     return `あなたはロジカルシンキング（論理的思考）の専門家です。
 
 ロジカルシンキングの手順:
@@ -140,7 +149,10 @@ class LogicalThinkingPromptTemplate extends LLMPromptTemplate {
 - 根拠と結論の論理的飛躍を避ける
 - 結論を頂点とした階層構造で全体を可視化
 
-出力は必ず指定されたスキーマに従ってください。`;
+出力形式（JSON）:
+${schemaExample}
+
+必ず上記のJSON形式で出力してください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

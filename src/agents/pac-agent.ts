@@ -20,7 +20,7 @@ export class PACThinkingAgent extends BaseThinkingAgent {
   };
 
   protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const promptTemplate = new PACPromptTemplate();
+    const promptTemplate = new PACPromptTemplate(this);
     const { system, user } = promptTemplate.generatePrompts(input);
 
     // AI SDKのgenerateObjectを使用してスキーマ保証
@@ -33,6 +33,9 @@ export class PACThinkingAgent extends BaseThinkingAgent {
         temperature: 0.2,
         maxRetries: 3,
         enableAutoRecovery: true,
+        schemaName: 'PACOutput',
+        schemaDescription: 'PAC思考の分析結果を表す構造化データ',
+        mode: 'json',
       }
     );
 
@@ -51,7 +54,13 @@ export class PACThinkingAgent extends BaseThinkingAgent {
 }
 
 class PACPromptTemplate extends LLMPromptTemplate {
+  constructor(private agent: PACThinkingAgent) {
+    super();
+  }
+
   protected getSystemPrompt(): string {
+    const schemaExample = this.agent.generateSchemaExample(PACOutput);
+    
     return `あなたはPAC思考の専門家です。
 
 PAC思考の構造:
@@ -64,7 +73,10 @@ PAC思考の構造:
 2. 前提(P)の信頼性検証 - 個人の解釈で美化されていないか
 3. 検証方法の提示 - 仮定を実験で壊せる形に
 
-出力は必ず指定されたスキーマに従ってください。`;
+出力形式（JSON）:
+${schemaExample}
+
+必ず上記のJSON形式で出力してください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

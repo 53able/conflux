@@ -21,7 +21,7 @@ export class MetaThinkingAgent extends BaseThinkingAgent {
   };
 
   protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const promptTemplate = new MetaPromptTemplate();
+    const promptTemplate = new MetaPromptTemplate(this);
     const { system, user } = promptTemplate.generatePrompts(input);
 
     // AI SDKのgenerateObjectを使用してスキーマ保証
@@ -34,6 +34,9 @@ export class MetaThinkingAgent extends BaseThinkingAgent {
         temperature: 0.4,
         maxRetries: 3,
         enableAutoRecovery: true,
+        schemaName: 'MetaOutput',
+        schemaDescription: 'メタ思考の分析結果を表す構造化データ',
+        mode: 'json',
       }
     );
 
@@ -52,7 +55,13 @@ export class MetaThinkingAgent extends BaseThinkingAgent {
 }
 
 class MetaPromptTemplate extends LLMPromptTemplate {
+  constructor(private agent: MetaThinkingAgent) {
+    super();
+  }
+
   protected getSystemPrompt(): string {
+    const schemaExample = this.agent.generateSchemaExample(MetaOutput);
+    
     return `あなたはメタ思考の専門家です。
 
 メタ思考の階層:
@@ -65,7 +74,10 @@ class MetaPromptTemplate extends LLMPromptTemplate {
 3. 思考の思考による質的向上
 4. 評価基準・成功指標の再定義
 
-出力は必ず指定されたスキーマに従ってください。`;
+出力形式（JSON）:
+${schemaExample}
+
+必ず上記のJSON形式で出力してください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

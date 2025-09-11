@@ -45,7 +45,7 @@ export class CriticalThinkingAgent extends BaseThinkingAgent {
    */
   protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
     const typedInput = input as { claim: string; evidence?: string[]; context?: string };
-    const promptTemplate = new CriticalThinkingPromptTemplate();
+    const promptTemplate = new CriticalThinkingPromptTemplate(this);
     const { system, user } = promptTemplate.generatePrompts(typedInput);
 
     // AI SDKのgenerateObjectを使用してスキーマ保証
@@ -58,6 +58,9 @@ export class CriticalThinkingAgent extends BaseThinkingAgent {
         temperature: 0.4, // 批判的思考には多角的視点が必要
         maxRetries: 3,
         enableAutoRecovery: true,
+        schemaName: 'CriticalOutput',
+        schemaDescription: 'クリティカル思考の分析結果を表す構造化データ',
+        mode: 'json',
       }
     );
 
@@ -144,7 +147,13 @@ export class CriticalThinkingAgent extends BaseThinkingAgent {
  * クリティカルシンキング思考用のプロンプトテンプレート
  */
 class CriticalThinkingPromptTemplate extends LLMPromptTemplate {
+  constructor(private agent: CriticalThinkingAgent) {
+    super();
+  }
+
   protected getSystemPrompt(): string {
+    const schemaExample = this.agent.generateSchemaExample(CriticalOutput);
+    
     return `あなたはクリティカルシンキング（批判的思考）の専門家です。
 
 クリティカルシンキングの手順:
@@ -160,7 +169,10 @@ class CriticalThinkingPromptTemplate extends LLMPromptTemplate {
 - 強みと弱みの両面を公平に評価
 - 具体的な改善提案を含む
 
-出力は必ず指定されたスキーマに従ってください。`;
+出力形式（JSON）:
+${schemaExample}
+
+必ず上記のJSON形式で出力してください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

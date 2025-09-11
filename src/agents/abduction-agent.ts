@@ -40,7 +40,7 @@ export class AbductionAgent extends BaseThinkingAgent {
    */
   protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
     const typedInput = input as { surprisingFact: string; context?: string; domain?: string };
-    const promptTemplate = new AbductionPromptTemplate();
+    const promptTemplate = new AbductionPromptTemplate(this);
     const { system, user } = promptTemplate.generatePrompts(typedInput);
 
     // AI SDKのgenerateObjectを使用してスキーマ保証
@@ -53,6 +53,9 @@ export class AbductionAgent extends BaseThinkingAgent {
         temperature: 0.7, // 創造的な仮説生成のために少し高め
         maxRetries: 3,
         enableAutoRecovery: true,
+        schemaName: 'AbductionOutput',
+        schemaDescription: 'アブダクション思考の分析結果を表す構造化データ',
+        mode: 'json',
       }
     );
 
@@ -62,7 +65,7 @@ export class AbductionAgent extends BaseThinkingAgent {
   /**
    * アブダクション思考特有の信頼度計算
    */
-  protected override calculateConfidence(output: Record<string, unknown>, context: AgentContext): number {
+  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const abductionOutput = output as AbductionOutput;
     
     // 仮説数と妥当性スコアから信頼度を算出
@@ -82,7 +85,7 @@ export class AbductionAgent extends BaseThinkingAgent {
   protected override generateReasoningExplanation(
     input: unknown, 
     output: Record<string, unknown>, 
-    context: AgentContext
+    _context: AgentContext
   ): string {
     const typedInput = input as { surprisingFact: string; context?: string };
     const typedOutput = output as AbductionOutput;
@@ -116,7 +119,13 @@ export class AbductionAgent extends BaseThinkingAgent {
  * アブダクション思考用のプロンプトテンプレート
  */
 class AbductionPromptTemplate extends LLMPromptTemplate {
+  constructor(private agent: AbductionAgent) {
+    super();
+  }
+
   protected getSystemPrompt(): string {
+    const schemaExample = this.agent.generateSchemaExample(AbductionOutput);
+    
     return `あなたはアブダクション（仮説形成）思考の専門家です。
 
 アブダクション思考の手順:
@@ -130,7 +139,10 @@ class AbductionPromptTemplate extends LLMPromptTemplate {
 - 各仮説から演繹的に導かれる「検証可能な予測」を明示
 - 最尤仮説を選択しつつ、代替仮説の可能性も保持
 
-出力は必ず指定されたスキーマに従ってください。`;
+出力形式（JSON）:
+${schemaExample}
+
+必ず上記のJSON形式で出力してください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

@@ -37,7 +37,7 @@ export class MECEAgent extends BaseThinkingAgent {
 
   protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
     const typedInput = input as { purpose: string; items: string[]; proposedCriteria?: string };
-    const promptTemplate = new MECEPromptTemplate();
+    const promptTemplate = new MECEPromptTemplate(this);
     const { system, user } = promptTemplate.generatePrompts(typedInput);
 
     // AI SDKのgenerateObjectを使用してスキーマ保証
@@ -50,6 +50,9 @@ export class MECEAgent extends BaseThinkingAgent {
         temperature: 0.2, // 論理的分類なので低めの温度設定
         maxRetries: 3,
         enableAutoRecovery: true,
+        schemaName: 'MECEOutput',
+        schemaDescription: 'MECE思考の分析結果を表す構造化データ',
+        mode: 'json',
       }
     );
 
@@ -84,7 +87,13 @@ export class MECEAgent extends BaseThinkingAgent {
 }
 
 class MECEPromptTemplate extends LLMPromptTemplate {
+  constructor(private agent: MECEAgent) {
+    super();
+  }
+
   protected getSystemPrompt(): string {
+    const schemaExample = this.agent.generateSchemaExample(MECEOutput);
+    
     return `あなたはMECE（Mutually Exclusive and Collectively Exhaustive）思考の専門家です。
 
 MECEの手順:
@@ -99,7 +108,10 @@ MECEの手順:
 - 分類軸は目的に対して意味がある変数を選択
 - 粒度を揃える（同じレベルの抽象度で分類）
 
-出力は必ず指定されたスキーマに従ってください。`;
+出力形式（JSON）:
+${schemaExample}
+
+必ず上記のJSON形式で出力してください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

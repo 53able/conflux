@@ -36,7 +36,7 @@ export class DeductiveThinkingAgent extends BaseThinkingAgent {
   };
 
   protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const promptTemplate = new DeductivePromptTemplate();
+    const promptTemplate = new DeductivePromptTemplate(this);
     const { system, user } = promptTemplate.generatePrompts(input);
 
     // AI SDKのgenerateObjectを使用してスキーマ保証
@@ -49,6 +49,9 @@ export class DeductiveThinkingAgent extends BaseThinkingAgent {
         temperature: 0.1, // 演繹は論理的厳密性が重要
         maxRetries: 3,
         enableAutoRecovery: true,
+        schemaName: 'DeductiveOutput',
+        schemaDescription: '演繹的思考の分析結果を表す構造化データ',
+        mode: 'json',
       }
     );
 
@@ -82,7 +85,13 @@ export class DeductiveThinkingAgent extends BaseThinkingAgent {
 }
 
 class DeductivePromptTemplate extends LLMPromptTemplate {
+  constructor(private agent: DeductiveThinkingAgent) {
+    super();
+  }
+
   protected getSystemPrompt(): string {
+    const schemaExample = this.agent.generateSchemaExample(DeductiveOutput);
+    
     return `あなたは演繹的思考の専門家です。
 
 演繹的思考の構造:
@@ -96,7 +105,10 @@ class DeductivePromptTemplate extends LLMPromptTemplate {
 - 結論の含意の明確化（結論が何を意味するか）
 - 前提の脆弱性の認識（前提が崩れる条件）
 
-出力は必ず指定されたスキーマに従ってください。`;
+出力形式（JSON）:
+${schemaExample}
+
+必ず上記のJSON形式で出力してください。`;
   }
 
   protected getUserPrompt(input: unknown): string {

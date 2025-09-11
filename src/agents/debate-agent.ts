@@ -20,7 +20,7 @@ export class DebateThinkingAgent extends BaseThinkingAgent {
   };
 
   protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const promptTemplate = new DebatePromptTemplate();
+    const promptTemplate = new DebatePromptTemplate(this);
     const { system, user } = promptTemplate.generatePrompts(input);
 
     // AI SDKのgenerateObjectを使用してスキーマ保証
@@ -33,6 +33,9 @@ export class DebateThinkingAgent extends BaseThinkingAgent {
         temperature: 0.5, // 多角的な論点発見のため
         maxRetries: 3,
         enableAutoRecovery: true,
+        schemaName: 'DebateOutput',
+        schemaDescription: 'ディベート思考の分析結果を表す構造化データ',
+        mode: 'json',
       }
     );
 
@@ -71,7 +74,13 @@ export class DebateThinkingAgent extends BaseThinkingAgent {
 }
 
 class DebatePromptTemplate extends LLMPromptTemplate {
+  constructor(private agent: DebateThinkingAgent) {
+    super();
+  }
+
   protected getSystemPrompt(): string {
+    const schemaExample = this.agent.generateSchemaExample(DebateOutput);
+    
     return `あなたはディベート思考の専門家です。
 
 ディベート思考の手順:
@@ -87,7 +96,10 @@ class DebatePromptTemplate extends LLMPromptTemplate {
 - 見えていなかった争点の発見
 - 感情的にならず論理的に
 
-出力は必ず指定されたスキーマに従ってください。`;
+出力形式（JSON）:
+${schemaExample}
+
+必ず上記のJSON形式で出力してください。`;
   }
 
   protected getUserPrompt(input: unknown): string {
