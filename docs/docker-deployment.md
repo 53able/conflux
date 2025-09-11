@@ -2,8 +2,8 @@
 
 Conflux MCPサーバーをDockerコンテナとしてデプロイする方法を説明します。
 
-**バージョン**: 0.2.0  
-**パッケージ名**: @53able/conflux
+**パッケージ名**: @53able/conflux  
+**最新バージョン**: [GitHub Releases](https://github.com/53able/conflux/releases)を参照
 
 ## 前提条件
 

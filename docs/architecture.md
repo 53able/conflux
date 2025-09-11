@@ -4,9 +4,9 @@
 
 Confluxは、9つの構造化された思考法を組み合わせたマルチエージェントシステムで、開発の各局面に最適な意思決定と分析を支援するTypeScriptライブラリです。Model Context Protocol (MCP)準拠で、AI開発環境との統合を実現しています。
 
-**バージョン**: 0.2.0  
 **パッケージ名**: @53able/conflux  
-**リポジトリ**: https://github.com/53able/conflux
+**リポジトリ**: https://github.com/53able/conflux  
+**最新バージョン**: [GitHub Releases](https://github.com/53able/conflux/releases)を参照
 
 ## アーキテクチャ全体図
 

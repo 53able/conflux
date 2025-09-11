@@ -5,9 +5,9 @@
 @思考法の使い方.md をマルチエージェンティブに挙動するMCPツールを実装します。
 
 **プロジェクト名**: Conflux
-**バージョン**: 0.2.0
 **パッケージ名**: @53able/conflux
 **リポジトリ**: https://github.com/53able/conflux
+**最新バージョン**: [GitHub Releases](https://github.com/53able/conflux/releases)を参照
 
 ## 技術仕様
 
