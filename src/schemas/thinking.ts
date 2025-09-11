@@ -58,14 +58,14 @@ export type ThinkingProcessStatus = z.infer<typeof ThinkingProcessStatus>;
  * 思考の結果
  */
 export const ThinkingResult = z.object({
-  method: ThinkingMethodType,
-  status: ThinkingProcessStatus,
-  input: z.record(z.string(), z.unknown()),
-  output: z.record(z.string(), z.unknown()).optional(),
-  confidence: z.number().min(0).max(1),
-  reasoning: z.string(),
-  nextRecommendations: z.array(ThinkingMethodType).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  method: ThinkingMethodType.describe('使用された思考法'),
+  status: ThinkingProcessStatus.describe('思考プロセスの状態'),
+  input: z.record(z.string(), z.unknown()).describe('思考の入力データ'),
+  output: z.record(z.string(), z.unknown()).optional().describe('思考の出力結果'),
+  confidence: z.number().min(0).max(1).describe('結果の信頼度（0-1の数値）'),
+  reasoning: z.string().describe('思考プロセスの説明'),
+  nextRecommendations: z.array(ThinkingMethodType).optional().describe('次に推奨される思考法'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('追加のメタデータ'),
 });
 
 export type ThinkingResult = z.infer<typeof ThinkingResult>;
@@ -86,11 +86,11 @@ export type AbductionInput = z.infer<typeof AbductionInput>;
  */
 export const AbductionOutput = z.object({
   hypotheses: z.array(z.object({
-    explanation: z.string(),
-    plausibility: z.number().min(0).max(1),
-    testablePredicitions: z.array(z.string()),
-  })),
-  recommendedNext: z.array(ThinkingMethodType),
+    explanation: z.string().describe('仮説の説明'),
+    plausibility: z.number().min(0).max(1).describe('仮説の妥当性（0-1の数値）'),
+    testablePredicitions: z.array(z.string()).describe('検証可能な予測の配列'),
+  })).describe('生成された仮説の配列'),
+  recommendedNext: z.array(ThinkingMethodType).describe('次に推奨される思考法'),
 });
 
 export type AbductionOutput = z.infer<typeof AbductionOutput>;
@@ -110,19 +110,19 @@ export type LogicalInput = z.infer<typeof LogicalInput>;
  * ロジカルシンキング思考の出力
  */
 export const LogicalOutput = z.object({
-  conclusion: z.string(),
+  conclusion: z.string().describe('論理的な結論'),
   reasoning: z.array(z.object({
-    step: z.string(),
-    evidence: z.array(z.string()),
-    inference: z.string(),
-  })),
+    step: z.string().describe('推論のステップ'),
+    evidence: z.array(z.string()).describe('根拠となる証拠'),
+    inference: z.string().describe('推論の内容'),
+  })).describe('論理的な推論プロセス'),
   pyramid: z.object({
-    conclusion: z.string(),
+    conclusion: z.string().describe('ピラミッド構造の結論'),
     supports: z.array(z.object({
-      claim: z.string(),
-      evidence: z.array(z.string()),
-    })),
-  }),
+      claim: z.string().describe('支持する主張'),
+      evidence: z.array(z.string()).describe('根拠となる証拠'),
+    })).describe('結論を支持する主張の配列'),
+  }).describe('ピラミッド構造の論理構成'),
 });
 
 export type LogicalOutput = z.infer<typeof LogicalOutput>;
@@ -142,13 +142,13 @@ export type DeductiveInput = z.infer<typeof DeductiveInput>;
  * 演繹的思考の出力
  */
 export const DeductiveOutput = z.object({
-  conclusion: z.string(),
+  conclusion: z.string().describe('演繹的推論の結論'),
   validityCheck: z.object({
-    isValid: z.boolean(),
-    reasoning: z.string(),
-    premiseReliability: z.number().min(0).max(1),
-  }),
-  implications: z.array(z.string()),
+    isValid: z.boolean().describe('論理の妥当性'),
+    reasoning: z.string().describe('妥当性チェックの理由'),
+    premiseReliability: z.number().min(0).max(1).describe('前提の信頼性（0-1の数値）'),
+  }).describe('論理の妥当性チェック'),
+  implications: z.array(z.string()).describe('結論から導かれる含意の配列'),
 });
 
 export type DeductiveOutput = z.infer<typeof DeductiveOutput>;
@@ -194,15 +194,15 @@ export type MECEInput = z.infer<typeof MECEInput>;
  * MECE思考の出力
  */
 export const MECEOutput = z.object({
-  criteria: z.string(),
+  criteria: z.string().describe('分類に使用された基準'),
   categories: z.array(z.object({
-    name: z.string(),
-    items: z.array(z.string()),
-    coverage: z.string(),
-  })),
-  gaps: z.array(z.string()),
-  overlaps: z.array(z.string()),
-  completenessScore: z.number().min(0).max(1),
+    name: z.string().describe('カテゴリ名'),
+    items: z.array(z.string()).describe('カテゴリに属する項目'),
+    coverage: z.string().describe('カテゴリの範囲説明'),
+  })).describe('分類されたカテゴリの配列'),
+  gaps: z.array(z.string()).describe('分類で見つかったギャップ'),
+  overlaps: z.array(z.string()).describe('分類で見つかった重複'),
+  completenessScore: z.number().min(0).max(1).describe('分類の完全性スコア（0-1の数値）'),
 });
 
 export type MECEOutput = z.infer<typeof MECEOutput>;
@@ -221,19 +221,19 @@ export type PACInput = z.infer<typeof PACInput>;
  * PAC思考の出力
  */
 export const PACOutput = z.object({
-  premise: z.string(),
-  assumption: z.string(),
-  conclusion: z.string(),
+  premise: z.string().describe('前提'),
+  assumption: z.string().describe('仮定'),
+  conclusion: z.string().describe('結論'),
   assumptions_validity: z.object({
-    isValid: z.boolean(),
-    concerns: z.array(z.string()),
-    testMethods: z.array(z.string()),
-  }),
+    isValid: z.boolean().describe('仮定の妥当性'),
+    concerns: z.array(z.string()).describe('懸念事項の配列'),
+    testMethods: z.array(z.string()).describe('検証方法の配列'),
+  }).describe('仮定の妥当性チェック'),
   premise_validity: z.object({
-    isReliable: z.boolean(),
-    biases: z.array(z.string()),
-    verification_needed: z.array(z.string()),
-  }),
+    isReliable: z.boolean().describe('前提の信頼性'),
+    biases: z.array(z.string()).describe('バイアスの配列'),
+    verification_needed: z.array(z.string()).describe('検証が必要な項目の配列'),
+  }).describe('前提の妥当性チェック'),
 });
 
 export type PACOutput = z.infer<typeof PACOutput>;
@@ -253,16 +253,16 @@ export type MetaInput = z.infer<typeof MetaInput>;
  */
 export const MetaOutput = z.object({
   processEvaluation: z.object({
-    currentProcess: z.array(z.string()),
-    effectiveness: z.number().min(0).max(1),
-    gaps: z.array(z.string()),
-  }),
+    currentProcess: z.array(z.string()).describe('現在の思考プロセスの配列'),
+    effectiveness: z.number().min(0).max(1).describe('プロセスの有効性（0-1の数値）'),
+    gaps: z.array(z.string()).describe('プロセスのギャップの配列'),
+  }).describe('思考プロセスの評価'),
   recommendations: z.array(z.object({
-    aspect: z.string(),
-    improvement: z.string(),
-    priority: z.enum(['high', 'medium', 'low']),
-  })),
-  alternativeApproaches: z.array(z.string()),
+    aspect: z.string().describe('改善対象の側面'),
+    improvement: z.string().describe('改善提案'),
+    priority: z.enum(['high', 'medium', 'low']).describe('優先度'),
+  })).describe('改善推奨事項の配列'),
+  alternativeApproaches: z.array(z.string()).describe('代替アプローチの配列'),
 });
 
 export type MetaOutput = z.infer<typeof MetaOutput>;
@@ -281,23 +281,23 @@ export type DebateInput = z.infer<typeof DebateInput>;
  * ディベート思考の出力
  */
 export const DebateOutput = z.object({
-  proposition: z.string(),
+  proposition: z.string().describe('論題'),
   proArguments: z.array(z.object({
-    argument: z.string(),
-    evidence: z.array(z.string()),
-    strength: z.number().min(0).max(1),
-  })),
+    argument: z.string().describe('賛成論点'),
+    evidence: z.array(z.string()).describe('根拠の配列'),
+    strength: z.number().min(0).max(1).describe('論点の強さ（0-1の数値）'),
+  })).describe('賛成論点の配列'),
   conArguments: z.array(z.object({
-    argument: z.string(),
-    evidence: z.array(z.string()),
-    strength: z.number().min(0).max(1),
-  })),
-  keyDisputes: z.array(z.string()),
+    argument: z.string().describe('反対論点'),
+    evidence: z.array(z.string()).describe('根拠の配列'),
+    strength: z.number().min(0).max(1).describe('論点の強さ（0-1の数値）'),
+  })).describe('反対論点の配列'),
+  keyDisputes: z.array(z.string()).describe('主要な争点の配列'),
   recommendation: z.object({
-    decision: z.enum(['support', 'oppose', 'modify']),
-    reasoning: z.string(),
-    conditions: z.array(z.string()).optional(),
-  }),
+    decision: z.enum(['support', 'oppose', 'modify']).describe('最終的な判断'),
+    reasoning: z.string().describe('判断の理由'),
+    conditions: z.array(z.string()).optional().describe('条件の配列'),
+  }).describe('推奨事項'),
 });
 
 export type DebateOutput = z.infer<typeof DebateOutput>;
@@ -318,17 +318,17 @@ export type CriticalInput = z.infer<typeof CriticalInput>;
  */
 export const CriticalOutput = z.object({
   questioningResults: z.object({
-    questionValidity: z.array(z.string()),
-    logicalGaps: z.array(z.string()),
-    assumptionChallenges: z.array(z.string()),
-    biases: z.array(z.string()),
-  }),
+    questionValidity: z.array(z.string()).describe('妥当性に関する質問の配列'),
+    logicalGaps: z.array(z.string()).describe('論理的ギャップの配列'),
+    assumptionChallenges: z.array(z.string()).describe('仮定への挑戦の配列'),
+    biases: z.array(z.string()).describe('バイアスの配列'),
+  }).describe('批判的質問の結果'),
   strengthsWeaknesses: z.object({
-    strengths: z.array(z.string()),
-    weaknesses: z.array(z.string()),
-    missingEvidence: z.array(z.string()),
-  }),
-  recommendations: z.array(z.string()),
+    strengths: z.array(z.string()).describe('強みの配列'),
+    weaknesses: z.array(z.string()).describe('弱みの配列'),
+    missingEvidence: z.array(z.string()).describe('不足している証拠の配列'),
+  }).describe('強みと弱みの分析'),
+  recommendations: z.array(z.string()).describe('改善推奨事項の配列'),
 });
 
 export type CriticalOutput = z.infer<typeof CriticalOutput>;
@@ -337,14 +337,14 @@ export type CriticalOutput = z.infer<typeof CriticalOutput>;
  * 思考プロセス全体の統合結果
  */
 export const IntegratedThinkingResult = z.object({
-  phase: DevelopmentPhase,
-  primaryMethod: ThinkingMethodType,
-  secondaryMethods: z.array(ThinkingMethodType),
-  results: z.array(ThinkingResult),
-  synthesis: z.string(),
-  actionItems: z.array(z.string()),
-  confidence: z.number().min(0).max(1),
-  nextSteps: z.array(z.string()),
+  phase: DevelopmentPhase.describe('開発の局面'),
+  primaryMethod: ThinkingMethodType.describe('主要な思考法'),
+  secondaryMethods: z.array(ThinkingMethodType).describe('補助的な思考法の配列'),
+  results: z.array(ThinkingResult).describe('各思考法の結果の配列'),
+  synthesis: z.string().describe('統合された思考結果の要約'),
+  actionItems: z.array(z.string()).describe('実行すべきアクションアイテムの配列'),
+  confidence: z.number().min(0).max(1).describe('統合結果の信頼度（0-1の数値）'),
+  nextSteps: z.array(z.string()).describe('次のステップの配列'),
 });
 
 export type IntegratedThinkingResult = z.infer<typeof IntegratedThinkingResult>;
