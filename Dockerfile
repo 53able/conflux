@@ -48,5 +48,5 @@ USER conflux
 
 # MCP server runs on stdio, no port needed
 # Start the MCP server
-CMD ["node", "dist/mcp-server.js"]
+CMD ["node", "dist/mcp/server.js"]
 
