@@ -93,19 +93,11 @@ class ThinkingCLI {
     // server コマンド
     program
       .command('server')
+      .alias('mcp')
       .description('MCPサーバーを起動')
       .action(async (options: CLIOptions) => {
         await this.handleServerCommand({ verbose: options.verbose ?? false });
       });
-
-    // mcp コマンド（serverと同じ）
-    program
-      .command('mcp')
-      .description('MCPサーバーを起動（serverと同じ）')
-      .action(async (options: CLIOptions) => {
-        await this.handleServerCommand({ verbose: options.verbose ?? false });
-      });
-
     // パース実行
     await program.parseAsync();
   }
