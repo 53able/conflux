@@ -178,7 +178,8 @@ export class ThinkingOrchestrator {
       if (strategy.sequence) {
         let currentInput = initialInput;
         
-        for (const methodType of strategy.sequence) {
+        for (let i = 0; i < strategy.sequence.length; i++) {
+          const methodType = strategy.sequence[i];
           const agent = this.agents.get(methodType);
           if (!agent) continue;
           
@@ -207,6 +208,41 @@ export class ThinkingOrchestrator {
               phase,
               strategy
             });
+            
+            // スキーマガイダンスが含まれている場合は、それを含めて結果を返す
+            if (result.output && result.output.mcpClientInstructions) {
+              this.logger.info('Schema guidance detected, returning early', {
+                methodType,
+                phase,
+                hasRetryInstructions: !!result.output.retryInstructions,
+                hasRecommendedSchema: !!result.output.recommendedInputSchema
+              });
+              
+              return this.createSchemaGuidanceResult(phase, strategy, result, methodType, results);
+            }
+            
+            // スキーマガイダンスがない場合でも、最初のエージェントで失敗した場合は早期リターン
+            if (i === 0) {
+              this.logger.warn('Primary agent failed without schema guidance, stopping sequence', {
+                methodType,
+                phase,
+                strategy
+              });
+              break;
+            }
+            
+            // 2番目以降のエージェントで失敗した場合、スキーマガイダンスを生成
+            if (i > 0) {
+              this.logger.warn('Secondary agent failed, generating schema guidance', {
+                methodType,
+                phase,
+                step: i + 1,
+                totalSteps: strategy.sequence.length,
+                previousResults: results.length
+              });
+              
+              return this.createSchemaGuidanceResult(phase, strategy, result, methodType, results);
+            }
           }
         }
       } else {
@@ -267,14 +303,58 @@ export class ThinkingOrchestrator {
         
         results.push(result);
         
-        // 失敗した場合はスキップして次へ
+        // 失敗した場合の処理
         if (result.status === 'failed') {
-          this.logger.warn('Golden pattern step failed, continuing', {
+          this.logger.warn('Golden pattern step failed', {
             methodType,
             reasoning: result.reasoning,
             step: i + 1,
             totalSteps: goldenPattern.length
           });
+          
+          // スキーマガイダンスが含まれている場合は、それを含めて結果を返す
+          if (result.output && result.output.mcpClientInstructions) {
+            this.logger.info('Schema guidance detected in golden pattern, returning early', {
+              methodType,
+              step: i + 1,
+              hasRetryInstructions: !!result.output.retryInstructions,
+              hasRecommendedSchema: !!result.output.recommendedInputSchema
+            });
+            
+            return this.createSchemaGuidanceResult('business_exploration', {
+              primary: 'abduction',
+              secondary: GOLDEN_PATTERN_SEQUENCE.slice(1),
+              sequence: GOLDEN_PATTERN_SEQUENCE
+            }, result, methodType, results);
+          }
+          
+          // スキーマガイダンスがない場合でも、最初のステップで失敗した場合は早期リターン
+          if (i === 0) {
+            this.logger.warn('Golden pattern first step failed without schema guidance, stopping sequence', {
+              methodType,
+              step: i + 1,
+              totalSteps: goldenPattern.length
+            });
+            break;
+          }
+          
+          // 2番目以降のステップで失敗した場合、スキーマガイダンスを生成
+          if (i > 0) {
+            this.logger.warn('Golden pattern secondary step failed, generating schema guidance', {
+              methodType,
+              step: i + 1,
+              totalSteps: goldenPattern.length,
+              previousResults: results.length
+            });
+            
+            return this.createSchemaGuidanceResult('business_exploration', {
+              primary: 'abduction',
+              secondary: GOLDEN_PATTERN_SEQUENCE.slice(1),
+              sequence: GOLDEN_PATTERN_SEQUENCE
+            }, result, methodType, results);
+          }
+          
+          // 3番目以降のステップで失敗した場合はスキップして次へ
           continue;
         }
         
@@ -299,6 +379,148 @@ export class ThinkingOrchestrator {
       secondary: GOLDEN_PATTERN_SEQUENCE.slice(1),
       sequence: GOLDEN_PATTERN_SEQUENCE,
     }, results, initialInput);
+  }
+
+
+  /**
+   * 順次実行シーケンス
+   */
+  private async executeSequentialSequence(
+    sequence: ThinkingMethodType[],
+    input: Record<string, unknown>,
+    context: AgentContext
+  ): Promise<IntegratedThinkingResult> {
+    const results: ThinkingResult[] = [];
+    let currentInput = input;
+
+    for (let i = 0; i < sequence.length; i++) {
+      const methodType = sequence[i];
+      const agent = this.agents.get(methodType);
+      if (!agent) continue;
+
+      try {
+        // 入力形式を変換
+        const convertedInput = this.convertInputForMethod(methodType, currentInput, 'business_exploration');
+        
+        const result = await agent.think(convertedInput, {
+          ...context,
+          previousResults: results,
+          metadata: { ...context.metadata, customSequence: true, step: i + 1, totalSteps: sequence.length },
+        });
+        
+        results.push(result);
+        
+        // 失敗した場合の処理
+        if (result.status === 'failed') {
+          this.logger.warn('Custom sequence step failed', {
+            methodType,
+            reasoning: result.reasoning,
+            step: i + 1,
+            totalSteps: sequence.length
+          });
+          
+          // スキーマガイダンスが含まれている場合は、それを含めて結果を返す
+          if (result.output && result.output.mcpClientInstructions) {
+            this.logger.info('Schema guidance detected in custom sequence, returning early', {
+              methodType,
+              step: i + 1,
+              hasRetryInstructions: !!result.output.retryInstructions,
+              hasRecommendedSchema: !!result.output.recommendedInputSchema
+            });
+            
+            return this.createSchemaGuidanceResult('business_exploration', {
+              primary: sequence[0],
+              secondary: sequence.slice(1),
+              sequence: sequence
+            }, result, methodType, results);
+          }
+          
+          // スキーマガイダンスがない場合でも、最初のステップで失敗した場合は早期リターン
+          if (i === 0) {
+            this.logger.warn('Custom sequence first step failed without schema guidance, stopping sequence', {
+              methodType,
+              step: i + 1,
+              totalSteps: sequence.length
+            });
+            break;
+          }
+          
+          // 2番目以降のステップで失敗した場合、スキーマガイダンスを生成
+          if (i > 0) {
+            this.logger.warn('Custom sequence secondary step failed, generating schema guidance', {
+              methodType,
+              step: i + 1,
+              totalSteps: sequence.length,
+              previousResults: results.length
+            });
+            
+            return this.createSchemaGuidanceResult('business_exploration', {
+              primary: sequence[0],
+              secondary: sequence.slice(1),
+              sequence: sequence
+            }, result, methodType, results);
+          }
+          
+          // 3番目以降のステップで失敗した場合はスキップして次へ
+          continue;
+        }
+        
+        // 成功した結果を次の入力として使用
+        if (result.output) {
+          currentInput = { ...currentInput, [methodType]: result.output };
+        }
+        
+      } catch (error) {
+        this.logger.error('Custom sequence step error', {
+          methodType,
+          step: i + 1,
+          totalSteps: sequence.length,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
+      }
+    }
+
+    return this.synthesizeResults('business_exploration', {
+      primary: sequence[0],
+      secondary: sequence.slice(1),
+      sequence: sequence
+    }, results, input);
+  }
+
+
+  /**
+   * カスタム戦略の実行（PHASE_THINKING_MAP形式）
+   */
+  async processCustomStrategy(
+    strategy: { primary: ThinkingMethodType; secondary: ThinkingMethodType[]; sequence: ThinkingMethodType[] },
+    input: Record<string, unknown>,
+    context: AgentContext
+  ): Promise<IntegratedThinkingResult> {
+    // 常に順次実行
+    const result = await this.executeSequentialSequence(strategy.sequence, input, context);
+    // 戦略情報を正しく設定
+    return {
+      ...result,
+      primaryMethod: strategy.primary,
+      secondaryMethods: strategy.secondary,
+    };
+  }
+
+  /**
+   * 局面に基づくカスタムシーケンスの実行（PHASE_THINKING_MAPとの互換性）
+   */
+  async processPhaseCustomSequence(
+    phase: DevelopmentPhase,
+    input: Record<string, unknown>,
+    context: AgentContext
+  ): Promise<IntegratedThinkingResult> {
+    const strategy = PHASE_THINKING_MAP[phase];
+    if (!strategy.sequence) {
+      throw new Error(`No sequence defined for phase: ${phase}`);
+    }
+    
+    return this.executeSequentialSequence(strategy.sequence, input, context);
   }
 
   /**
@@ -553,6 +775,34 @@ export class ThinkingOrchestrator {
       default:
         return input;
     }
+  }
+
+  /**
+   * スキーマガイダンス結果の作成
+   */
+  private createSchemaGuidanceResult(
+    phase: DevelopmentPhase, 
+    strategy: OrchestrationStrategy, 
+    failedResult: ThinkingResult,
+    failedMethodType: ThinkingMethodType,
+    results: ThinkingResult[] = []
+  ): IntegratedThinkingResult {
+    return {
+      phase,
+      primaryMethod: strategy.primary,
+      secondaryMethods: strategy.secondary,
+      results: [failedResult],
+      synthesis: `多段階思考プロセス中に${failedMethodType}エージェントで入力データの不正が検出されました。推奨スキーマに従って入力データを修正し、同じ思考プロセスを再実行してください。\n\n使用するMCPツール: process-phase\n\n実行済み思考法: ${results.length > 1 ? results.slice(0, -1).map(r => r.method).join(', ') + ' → ' + failedMethodType : failedMethodType}`,
+      actionItems: [
+        '入力データを推奨スキーマに従って修正してください',
+        `修正後、process-phaseツールで同じ思考プロセスを再実行してください（実行済み: ${results.length > 1 ? results.slice(0, -1).map(r => r.method).join(', ') + ' → ' + failedMethodType : failedMethodType}）`
+      ],
+      confidence: 0.0,
+      nextSteps: [
+        '入力データの修正',
+        `process-phaseツールでの思考プロセス再実行（失敗箇所: ${failedMethodType}）`
+      ]
+    };
   }
 
   /**
