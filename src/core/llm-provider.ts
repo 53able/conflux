@@ -70,23 +70,23 @@ export interface LLMProviderConfig {
 /**
  * デフォルトのLLMプロバイダー設定
  */
-const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMProviderConfig>> = {
+export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMProviderConfig>> = {
   openai: {
-    model: process.env.OPENAI_MODEL || 'gpt-5',
+    model: process.env.OPENAI_MODEL || 'gpt-5-nano',
     defaultParams: {
       temperature: 0.3,
       maxTokens: 2000,
     },
   },
   anthropic: {
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-latest',
+    model: process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-latest',
     defaultParams: {
       temperature: 0.3,
       maxTokens: 2000,
     },
   },
   google: {
-    model: process.env.GOOGLE_MODEL || 'gemini-2.0-flash-exp',
+    model: process.env.GOOGLE_MODEL || 'gemini-2.5-flash',
     defaultParams: {
       temperature: 0.3,
       maxTokens: 2000,
@@ -130,27 +130,22 @@ export class LLMProviderManager {
     const fullConfig = { ...DEFAULT_CONFIGS[config.type], ...config };
     this.configs.set(name, fullConfig);
 
-    let provider: LLMProvider;
-
-    switch (config.type) {
-      case 'openai':
-        provider = this.createOpenAIProvider(fullConfig);
-        break;
-      case 'anthropic':
-        provider = this.createAnthropicProvider(fullConfig);
-        break;
-      case 'google':
-        provider = this.createGoogleProvider(fullConfig);
-        break;
-      case 'openai-compatible':
-        provider = this.createOpenAICompatibleProvider(fullConfig);
-        break;
-      case 'mock':
-        provider = this.createMockProvider(fullConfig);
-        break;
-      default:
-        throw new Error(`Unsupported provider type: ${config.type}`);
-    }
+    const provider = (() => {
+      switch (config.type) {
+        case 'openai':
+          return this.createOpenAIProvider(fullConfig);
+        case 'anthropic':
+          return this.createAnthropicProvider(fullConfig);
+        case 'google':
+          return this.createGoogleProvider(fullConfig);
+        case 'openai-compatible':
+          return this.createOpenAICompatibleProvider(fullConfig);
+        case 'mock':
+          return this.createMockProvider(fullConfig);
+        default:
+          throw new Error(`Unsupported provider type: ${config.type}`);
+      }
+    })();
 
     this.providers.set(name, provider);
 
@@ -217,7 +212,8 @@ export class LLMProviderManager {
     }
     
     // AI SDK v5の公式パターンに従う
-    const modelName = config.model || process.env.OPENAI_MODEL || 'gpt-5';
+    const defaultConfig = DEFAULT_CONFIGS.openai;
+    const modelName = config.model || process.env.OPENAI_MODEL || defaultConfig.model!;
     return openai(modelName);
   }
 
@@ -230,7 +226,8 @@ export class LLMProviderManager {
     }
     
     // AI SDK v5の公式パターンに従う
-    const modelName = config.model || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-latest';
+    const defaultConfig = DEFAULT_CONFIGS.anthropic;
+    const modelName = config.model || process.env.ANTHROPIC_MODEL || defaultConfig.model!;
     return anthropic(modelName);
   }
 
@@ -243,7 +240,8 @@ export class LLMProviderManager {
     }
     
     // AI SDK v5の公式パターンに従う
-    const modelName = config.model || process.env.GOOGLE_MODEL || 'gemini-2.0-flash-exp';
+    const defaultConfig = DEFAULT_CONFIGS.google;
+    const modelName = config.model || process.env.GOOGLE_MODEL || defaultConfig.model!;
     return google(modelName);
   }
 
@@ -300,19 +298,20 @@ export class LLMIntegration {
     const provider = this.providerManager.getProvider(providerName);
     const maxRetries = options?.maxRetries || 3;
     const enableAutoRecovery = options?.enableAutoRecovery ?? true;
-    let lastError: Error | null = null;
     
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const attempts = Array.from({ length: maxRetries }, (_, i) => i + 1);
+    
+    const executeAttempt = async (attempt: number, currentSystemPrompt: string, currentOptions: GenerationOptions | undefined): Promise<T> => {
       try {
         const generateObjectOptions = {
           model: provider as LanguageModel,
           schema: schema as ZodSchema,
-          system: systemPrompt,
+          system: currentSystemPrompt,
           prompt: userPrompt,
-          temperature: options?.temperature ?? 0.3,
-          mode: options?.mode ?? 'auto',
-          ...(options?.schemaName && { schemaName: options.schemaName }),
-          ...(options?.schemaDescription && { schemaDescription: options.schemaDescription }),
+          temperature: currentOptions?.temperature ?? 0.3,
+          mode: currentOptions?.mode ?? 'auto',
+          ...(currentOptions?.schemaName && { schemaName: currentOptions.schemaName }),
+          ...(currentOptions?.schemaDescription && { schemaDescription: currentOptions.schemaDescription }),
         } as Parameters<typeof generateObject>[0];
 
         const result = await generateObject(generateObjectOptions);
@@ -332,7 +331,7 @@ export class LLMIntegration {
 
         return result.object as T;
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
+        const lastError = error instanceof Error ? error : new Error(String(error));
         this.logger.warn('LLM generation attempt failed', {
           attempt,
           maxRetries,
@@ -343,10 +342,12 @@ export class LLMIntegration {
         if (enableAutoRecovery && attempt < maxRetries) {
           if (lastError.message.includes('Schema validation failed')) {
             // スキーマエラーの場合：プロンプトに詳細な指示を追加
-            systemPrompt = this.enhancePromptForSchemaCompliance(systemPrompt, schema, lastError);
+            const enhancedPrompt = this.enhancePromptForSchemaCompliance(currentSystemPrompt, schema, lastError);
+            return await executeAttempt(attempt + 1, enhancedPrompt, currentOptions);
           } else if (lastError.message.includes('timeout') || lastError.message.includes('rate limit')) {
             // タイムアウトやレート制限の場合：温度を下げて安定化
-            options = { ...options, temperature: Math.max((options?.temperature ?? 0.3) * 0.8, 0.1) };
+            const adjustedOptions = { ...currentOptions, temperature: Math.max((currentOptions?.temperature ?? 0.3) * 0.8, 0.1) };
+            return await executeAttempt(attempt + 1, currentSystemPrompt, adjustedOptions);
           }
         }
         
@@ -354,7 +355,7 @@ export class LLMIntegration {
           // 全ての試行が失敗した場合、フォールバックプロバイダーを試行
           if (enableAutoRecovery) {
             return await this.tryFallbackProviders<T>(
-              schema, systemPrompt, userPrompt, providerName, options
+              schema, currentSystemPrompt, userPrompt, providerName, currentOptions
             );
           }
           throw new Error(`LLM generation failed after ${maxRetries} attempts: ${lastError.message}`);
@@ -362,10 +363,11 @@ export class LLMIntegration {
         
         // 指数バックオフで再試行
         await this.sleep(Math.pow(2, attempt) * 1000);
+        return await executeAttempt(attempt + 1, currentSystemPrompt, currentOptions);
       }
-    }
+    };
     
-    throw new Error('Unexpected error in LLM generation');
+    return await executeAttempt(1, systemPrompt, options);
   }
 
   /**
@@ -473,7 +475,9 @@ ${schemaInfo}
     const provider = this.providerManager.getProvider(providerName);
     const maxRetries = options?.maxRetries || 3;
     
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const attempts = Array.from({ length: maxRetries }, (_, i) => i + 1);
+    
+    const executeAttempt = async (attempt: number): Promise<string> => {
       try {
         const result = await generateText({
           model: provider as LanguageModel,
@@ -495,10 +499,11 @@ ${schemaInfo}
         }
         
         await this.sleep(Math.pow(2, attempt) * 1000);
+        return await executeAttempt(attempt + 1);
       }
-    }
+    };
     
-    throw new Error('Unexpected error in LLM text generation');
+    return await executeAttempt(1);
   }
 
   /**
