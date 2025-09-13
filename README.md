@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6+-blue.svg)](https://www.typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-0.2.0-brightgreen.svg)](https://github.com/53able/conflux)
+[![Version](https://img.shields.io/badge/Version-0.3.1-brightgreen.svg)](https://github.com/53able/conflux)
 
 9つの構造化された思考法を組み合わせたマルチエージェントシステムで、開発の各局面に最適な意思決定と分析を支援します。
 
@@ -287,7 +287,7 @@ docker compose --env-file .env.docker up --build
 ```json
 {
   "mcpServers": {
-    "thinking-agents": {
+    "conflux-thinking-agents": {
       "command": "npx",
       "args": ["@53able/conflux", "server"],
       "env": {
@@ -343,7 +343,7 @@ AI SDK v5でサポートされている最新のモデル一覧は、[AI SDK v5�
 ```json
 {
   "mcp.servers": {
-    "thinking-agents": {
+    "conflux-thinking-agents": {
       "command": "npx",
       "args": ["@53able/conflux", "server"],
       "env": {
@@ -361,7 +361,7 @@ AI SDK v5でサポートされている最新のモデル一覧は、[AI SDK v5�
 ```json
 {
   "mcp.servers": {
-    "thinking-agents": {
+    "conflux-thinking-agents": {
       "command": "pnpm",
       "args": ["dlx", "@53able/conflux", "server"],
       "env": {
