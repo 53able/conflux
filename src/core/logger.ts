@@ -1,6 +1,52 @@
 import winston from 'winston';
 
 /**
+ * 色付きログ用のカラー定義
+ * chalkの代替としてwinstonの色指定を活用
+ */
+export const LogColors = {
+  // 基本色
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  gray: '\x1b[90m',
+  
+  // 太字
+  bold: '\x1b[1m',
+  
+  // リセット
+  reset: '\x1b[0m',
+  
+  // 組み合わせ色
+  brightRed: '\x1b[91m',
+  brightGreen: '\x1b[92m',
+  brightYellow: '\x1b[93m',
+  brightBlue: '\x1b[94m',
+  brightMagenta: '\x1b[95m',
+  brightCyan: '\x1b[96m',
+  brightWhite: '\x1b[97m',
+} as const;
+
+/**
+ * 色付きテキストを生成するヘルパー関数
+ */
+export const colorize = (text: string, color: keyof typeof LogColors): string => {
+  return `${LogColors[color]}${text}${LogColors.reset}`;
+};
+
+/**
+ * 複数の色を組み合わせる関数
+ */
+export const colorizeMultiple = (text: string, ...colors: (keyof typeof LogColors)[]): string => {
+  const colorCodes = colors.map(color => LogColors[color]).join('');
+  return `${colorCodes}${text}${LogColors.reset}`;
+};
+
+/**
  * 共通のWinstonロガー設定
  * Confluxプロジェクト全体で統一された構造化ログを提供
  */
@@ -144,6 +190,47 @@ export class Logger {
       Logger.instance = null as unknown as winston.Logger;
       Logger.isInitialized = false;
     }
+  }
+
+  /**
+   * 色付きログメソッド（chalkの代替）
+   */
+  public static infoColored(message: string, color: keyof typeof LogColors = 'white'): void {
+    const logger = Logger.getInstance();
+    logger.info(colorize(message, color));
+  }
+
+  public static warnColored(message: string, color: keyof typeof LogColors = 'yellow'): void {
+    const logger = Logger.getInstance();
+    logger.warn(colorize(message, color));
+  }
+
+  public static errorColored(message: string, color: keyof typeof LogColors = 'red'): void {
+    const logger = Logger.getInstance();
+    logger.error(colorize(message, color));
+  }
+
+  public static debugColored(message: string, color: keyof typeof LogColors = 'gray'): void {
+    const logger = Logger.getInstance();
+    logger.debug(colorize(message, color));
+  }
+
+  /**
+   * 複数色組み合わせログメソッド
+   */
+  public static infoMultiColored(message: string, ...colors: (keyof typeof LogColors)[]): void {
+    const logger = Logger.getInstance();
+    logger.info(colorizeMultiple(message, ...colors));
+  }
+
+  public static warnMultiColored(message: string, ...colors: (keyof typeof LogColors)[]): void {
+    const logger = Logger.getInstance();
+    logger.warn(colorizeMultiple(message, ...colors));
+  }
+
+  public static errorMultiColored(message: string, ...colors: (keyof typeof LogColors)[]): void {
+    const logger = Logger.getInstance();
+    logger.error(colorizeMultiple(message, ...colors));
   }
 }
 
