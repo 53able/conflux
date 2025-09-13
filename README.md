@@ -9,12 +9,29 @@
 
 9つの構造化された思考法を組み合わせたマルチエージェントシステムで、開発の各局面に最適な意思決定と分析を支援します。
 
+## 🧠 思考法開始時のコンテキスト
+
+**プロジェクト概要**
+Confluxは9つの構造化された思考法（アブダクション、ロジカル、クリティカル、MECE、演繹、帰納、PAC、メタ、ディベート）を組み合わせたマルチエージェントシステムです。
+
+**主要機能**
+- **局面特化**: 15の開発局面に最適化された思考法の組み合わせ
+- **型安全**: Zodスキーマベースの完全な型安全性（any型完全禁止）
+- **MCP準拠**: Model Context Protocolで他のAIツールと統合可能
+- **マルチエージェント**: 9つの専門思考法エージェントが連携して動作
+
+**使用方法**
+- **ライブラリ**: `import { ThinkingOrchestrator } from '@53able/conflux'`
+- **CLI**: `npx @53able/conflux [command]`
+- **MCPサーバー**: `npx @53able/conflux server`
+
+**詳細情報**
+- 完全なドキュメント: [README.md](README.md)
+- アーキテクチャ: [docs/architecture.md](docs/architecture.md)
+- 思考法理論: [docs/思考法の使い方.md](docs/思考法の使い方.md)
+
 ## ✨ 特徴
 
-- **🎯 局面特化**: 開発の15の局面それぞれに最適化された思考法の組み合わせ
-- **🤖 マルチエージェント**: 9つの専門思考法エージェントが連携して動作
-- **📊 型安全**: Zodスキーマベースの完全な型安全性（any型完全禁止）
-- **🌐 MCP準拠**: Model Context Protocolで他のAIツールと統合可能
 - **⚡ 高性能**: TypeScript + tsx による高速実行
 - **🎨 美しいCLI**: Commander.jsベースの直感的なコマンドライン
 - **🔗 LLM統合**: AI SDK v5で複数のLLMプロバイダーをサポート
@@ -74,9 +91,8 @@ OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux single critical '{"clai
 
 実際の思考分析を行うには、LLMプロバイダーのAPIキーが必要です。
 
-#### 方法1: 環境変数で設定（推奨）
+### 環境変数での設定（推奨）
 
-**CLIで使用する場合**:
 ```bash
 # 一時的に環境変数を設定して実行
 OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux single critical '{"claim": "この実装で十分"}'
@@ -88,7 +104,9 @@ ANTHROPIC_API_KEY=sk-ant-your-key-here npx @53able/conflux single critical '{"cl
 GOOGLE_GENERATIVE_AI_API_KEY=your-google-key npx @53able/conflux single critical '{"claim": "この実装で十分"}'
 ```
 
-**永続的に設定する場合**:
+### 永続的な設定
+
+**方法1: シェル設定ファイル**
 ```bash
 # .bashrc または .zshrc に追加
 export OPENAI_API_KEY=sk-proj-your-key-here
@@ -100,46 +118,38 @@ export DEFAULT_LLM_PROVIDER=openai  # or anthropic or google
 source ~/.bashrc  # または source ~/.zshrc
 ```
 
-#### 方法2: .envファイルで設定
-
-**プロジェクトで使用する場合**:
+**方法2: .envファイル**
 ```bash
 # プロジェクトルートに.envファイルを作成
-echo "OPENAI_API_KEY=sk-proj-your-key-here" > .env
-echo "ANTHROPIC_API_KEY=sk-ant-your-key-here" >> .env
-echo "GOOGLE_GENERATIVE_AI_API_KEY=your-google-key-here" >> .env
-echo "DEFAULT_LLM_PROVIDER=openai" >> .env
-```
-
-**設定例（完全版）**:
-```bash
+cat > .env << EOF
 # LLM Provider API Keys
 OPENAI_API_KEY=sk-proj-your-key-here
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 GOOGLE_GENERATIVE_AI_API_KEY=your-google-api-key-here
 
 # Model Configuration
-OPENAI_MODEL=gpt-5
-ANTHROPIC_MODEL=claude-sonnet-4-latest
-GOOGLE_MODEL=gemini-2.0-flash-exp
+OPENAI_MODEL=gpt-5-nano
+ANTHROPIC_MODEL=claude-3-5-haiku-latest
+GOOGLE_MODEL=gemini-2.5-flash
 
 # Default Provider
 DEFAULT_LLM_PROVIDER=openai
 
-# AI SDK v5 Settings (required for proper functioning)
+# AI SDK v5 Settings
 AI_SDK_DISABLE_TELEMETRY=true
 AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
+EOF
 ```
 
 #### APIキーの取得方法
 
-**OpenAI API Key**（推奨：gpt-5）
+**OpenAI API Key**（デフォルト：gpt-5-nano）
 - [OpenAI Platform](https://platform.openai.com/api-keys)でAPIキーを取得
 
-**Anthropic API Key**（推奨：Claude Sonnet 4）
+**Anthropic API Key**（デフォルト：claude-3-5-haiku-latest）
 - [Anthropic Console](https://console.anthropic.com/)でAPIキーを取得
 
-**Google Generative AI API Key**（推奨：Gemini 2.0 Flash）
+**Google Generative AI API Key**（デフォルト： gemini-2.5-flash）
 - [Google AI Studio](https://aistudio.google.com/app/apikey)でAPIキーを取得
 
 ### CLIでの動作確認
@@ -282,8 +292,9 @@ docker compose --env-file .env.docker up --build
 
 > **🐳 Docker**: 本番環境での使用にはDockerコンテナでの実行を推奨します。詳細は[Docker Deployment Guide](docs/docker-deployment.md)を参照してください。
 
-### MCP設定例（Claude Desktop）
+### MCP設定例
 
+**Claude Desktop / Cursor設定**
 ```json
 {
   "mcpServers": {
@@ -292,11 +303,11 @@ docker compose --env-file .env.docker up --build
       "args": ["@53able/conflux", "server"],
       "env": {
         "OPENAI_API_KEY": "sk-proj-your-openai-api-key-here",
-        "OPENAI_MODEL": "gpt-5",
+        "OPENAI_MODEL": "gpt-5-nano",
         "ANTHROPIC_API_KEY": "sk-ant-your-anthropic-api-key-here",
-        "ANTHROPIC_MODEL": "claude-sonnet-4-latest",
+        "ANTHROPIC_MODEL": "claude-3-5-haiku-latest",
         "GOOGLE_GENERATIVE_AI_API_KEY": "your-google-api-key-here",
-        "GOOGLE_MODEL": "gemini-2.0-flash-exp",
+        "GOOGLE_MODEL": "gemini-2.5-flash",
         "DEFAULT_LLM_PROVIDER": "openai",
         "AI_SDK_DISABLE_TELEMETRY": "true",
         "AI_SDK_VERCEL_AI_GATEWAY_DISABLED": "true"
@@ -311,11 +322,11 @@ docker compose --env-file .env.docker up --build
 | 環境変数 | 説明 | 必須 | デフォルト |
 |---------|------|------|-----------|
 | `OPENAI_API_KEY` | OpenAI APIキー | 推奨 | - |
-| `OPENAI_MODEL` | 使用するOpenAIモデル | 任意 | `gpt-5` |
+| `OPENAI_MODEL` | 使用するOpenAIモデル | 任意 | `gpt-5-nano` |
 | `ANTHROPIC_API_KEY` | Anthropic APIキー | 推奨 | - |
-| `ANTHROPIC_MODEL` | 使用するAnthropicモデル | 任意 | `claude-sonnet-4-latest` |
+| `ANTHROPIC_MODEL` | 使用するAnthropicモデル | 任意 | `claude-3-5-haiku-latest` |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | Google Generative AI APIキー | 任意 | - |
-| `GOOGLE_MODEL` | 使用するGoogleモデル | 任意 | `gemini-2.0-flash-exp` |
+| `GOOGLE_MODEL` | 使用するGoogleモデル | 任意 | `gemini-2.5-flash` |
 | `DEFAULT_LLM_PROVIDER` | デフォルトのLLMプロバイダー | 任意 | `openai` |
 | `AI_SDK_DISABLE_TELEMETRY` | テレメトリを無効化 | 推奨 | `true` |
 | `AI_SDK_VERCEL_AI_GATEWAY_DISABLED` | Vercel AI Gatewayを無効化 | 推奨 | `true` |
@@ -327,9 +338,9 @@ docker compose --env-file .env.docker up --build
 AI SDK v5でサポートされている最新のモデル一覧は、[AI SDK v5公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)で確認できます。
 
 **利用可能なプロバイダーとモデル**:
-- **OpenAI**: `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-chat-latest`, `gpt-4o`, `gpt-4o-mini`
-- **Anthropic**: `claude-sonnet-4-latest`, `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-latest`
-- **Google**: `gemini-2.0-flash-exp`, `gemini-1.5-flash`, `gemini-1.5-pro`
+- **OpenAI**: `gpt-5-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-chat-latest`, `gpt-4o`, `gpt-4o-mini`
+- **Anthropic**: `claude-3-5-haiku-latest`, `claude-sonnet-4-latest`, `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-latest`
+- **Google**: `gemini-2.5-flash`, `gemini-2.0-flash-exp`, `gemini-1.5-flash`, `gemini-1.5-pro`
 - **OpenAI互換**: カスタムエンドポイント（`openai-compatible`タイプ）
 - **Mock**: 開発・テスト用（`mock`タイプ）
 
@@ -337,43 +348,6 @@ AI SDK v5でサポートされている最新のモデル一覧は、[AI SDK v5�
 
 ### Cursor / Claude Codeでの使用
 
-#### Cursor設定
-
-**方法1: npx経由でnpmレジストリから実行（推奨）**
-```json
-{
-  "mcp.servers": {
-    "conflux-thinking-agents": {
-      "command": "npx",
-      "args": ["@53able/conflux", "server"],
-      "env": {
-        "OPENAI_API_KEY": "sk-proj-your-openai-api-key-here",
-        "DEFAULT_LLM_PROVIDER": "openai",
-        "AI_SDK_DISABLE_TELEMETRY": "true",
-        "AI_SDK_VERCEL_AI_GATEWAY_DISABLED": "true"
-      }
-    }
-  }
-}
-```
-
-**方法2: pnpm dlx経由**
-```json
-{
-  "mcp.servers": {
-    "conflux-thinking-agents": {
-      "command": "pnpm",
-      "args": ["dlx", "@53able/conflux", "server"],
-      "env": {
-        "OPENAI_API_KEY": "sk-proj-your-openai-api-key-here",
-        "DEFAULT_LLM_PROVIDER": "openai",
-        "AI_SDK_DISABLE_TELEMETRY": "true",
-        "AI_SDK_VERCEL_AI_GATEWAY_DISABLED": "true"
-      }
-    }
-  }
-}
-```
 
 #### プロジェクトセットアップ（開発者向け）
 
@@ -474,23 +448,6 @@ pnpm run dev
 
 ## ⚙️ 設定
 
-### 環境変数での設定（推奨）
-
-```bash
-# 基本設定
-OPENAI_API_KEY=your-openai-key
-ANTHROPIC_API_KEY=your-anthropic-key
-GOOGLE_GENERATIVE_AI_API_KEY=your-google-key
-DEFAULT_LLM_PROVIDER=openai  # or anthropic or google
-
-# AI SDK v5設定（推奨）
-AI_SDK_DISABLE_TELEMETRY=true
-AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
-
-# ログ設定
-LOG_LEVEL=info
-NODE_ENV=production
-```
 
 ### プログラムでの設定
 
@@ -564,17 +521,6 @@ MCPサーバーとして起動することで、他のAIツールと統合して
 
 MCPツールを組み合わせることで、複数の思考法を連鎖させた高度な分析が可能です。
 
-```bash
-# 1. 局面別推奨を取得
-npx @53able/conflux recommend debugging
-
-# 2. 推奨された思考法で分析
-npx @53able/conflux single abduction '{"surprisingFact": "APIが遅い"}'
-
-# 3. 黄金パターンで統合分析
-npx @53able/conflux golden '{"problem": "パフォーマンス問題の根本解決"}'
-```
-
 ## 🤝 貢献
 
 このプロジェクトへの貢献を歓迎します！
@@ -591,7 +537,6 @@ MIT License - 詳細は [LICENSE](LICENSE) ファイルを参照してくださ�
 
 ## 🙏 謝辞
 
-- [思考法の使い方](docs/思考法の使い方.md) - 本プロジェクトの思考法理論的基盤
 - [Commander.js](https://github.com/tj/commander.js) - 型安全なCLIパーサー
 - [AI SDK v5](https://sdk.vercel.ai/) - LLM統合ライブラリ
 - [Model Context Protocol](https://modelcontextprotocol.io/) - AI統合標準
