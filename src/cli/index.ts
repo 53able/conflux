@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { readFileSync } from 'fs';
-import chalk from 'chalk';
 import ora from 'ora';
 
 import { Command } from 'commander';
@@ -14,7 +13,7 @@ import {
   IntegratedThinkingResult,
   ThinkingResult
 } from '../schemas/thinking.js';
-import { Logger } from '../core/logger.js';
+import { Logger, colorize, colorizeMultiple } from '../core/logger.js';
 
 /**
  * CLIオプションの型定義
@@ -210,18 +209,18 @@ class ThinkingCLI {
 
     this.logger.info('Listing available thinking methods', { methodCount: methods.length });
     
-    console.log(chalk.blue.bold('利用可能な思考法:'));
-    console.log('');
+    Logger.infoColored('利用可能な思考法:', 'blue');
+    this.logger.info('');
 
     methods.forEach(method => {
-      console.log(`${chalk.green(method.name.padEnd(12))} ${method.description}`);
+      this.logger.info(`${colorize(method.name.padEnd(12), 'green')} ${method.description}`);
     });
   }
 
   private async handleRecommendCommand(config: { phase: string; verbose?: boolean }): Promise<void> {
       if (!this.isValidPhase(config.phase)) {
       this.logger.warn('Invalid phase specified', { phase: config.phase });
-      console.error(chalk.red('無効な局面が指定されました'));
+      Logger.errorColored('無効な局面が指定されました', 'red');
       this.printValidPhases();
       return;
     }
@@ -257,7 +256,7 @@ class ThinkingCLI {
     const rec = recommendations[config.phase];
     if (!rec) {
       this.logger.warn('No recommendations available for phase', { phase: config.phase });
-      console.log(chalk.yellow('この局面の推奨情報は準備中です'));
+      Logger.warnColored('この局面の推奨情報は準備中です', 'yellow');
       return;
     }
 
@@ -267,17 +266,17 @@ class ThinkingCLI {
       secondary: rec.secondary 
     });
 
-    console.log(chalk.blue.bold(`局面: ${config.phase}`));
-    console.log(chalk.gray(`目的: ${rec.purpose}`));
-    console.log('');
-    console.log(chalk.green(`主要思考法: ${rec.primary}`));
-    console.log(`併用推奨: ${rec.secondary.join(', ')}`);
+    Logger.infoMultiColored(`局面: ${config.phase}`, 'blue', 'bold');
+    Logger.infoColored(`目的: ${rec.purpose}`, 'gray');
+    this.logger.info('');
+    Logger.infoColored(`主要思考法: ${rec.primary}`, 'green');
+    this.logger.info(`併用推奨: ${rec.secondary.join(', ')}`);
   }
 
   private async handleServerCommand(_config: { verbose?: boolean }): Promise<void> {
     try {
       this.logger.info('Starting MCP Server');
-      console.log(chalk.cyan('🚀 Starting MCP Server...'));
+      Logger.infoColored('🚀 Starting MCP Server...', 'cyan');
       const server = new ThinkingMethodsMCPServer();
       await server.start();
     } catch (error) {
@@ -285,9 +284,9 @@ class ThinkingCLI {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
-      console.error(chalk.red('❌ Failed to start MCP server:'));
+      Logger.errorColored('❌ Failed to start MCP server:', 'red');
       if (error instanceof Error) {
-        console.error(chalk.red(error.message));
+        Logger.errorColored(error.message, 'red');
       }
       process.exit(1);
     }
@@ -321,29 +320,29 @@ class ThinkingCLI {
    */
   private displayResult(result: IntegratedThinkingResult, quiet: boolean): void {
     if (!quiet) {
-      console.log(chalk.blue.bold(`🎯 局面: ${result.phase}`));
-      console.log(chalk.green(`主要思考法: ${result.primaryMethod}`));
-      console.log(chalk.gray(`併用思考法: ${result.secondaryMethods.join(', ')}`));
-      console.log(`信頼度: ${(result.confidence * 100).toFixed(1)}%`);
-      console.log('');
+      Logger.infoMultiColored(`🎯 局面: ${result.phase}`, 'blue', 'bold');
+      Logger.infoColored(`主要思考法: ${result.primaryMethod}`, 'green');
+      Logger.infoColored(`併用思考法: ${result.secondaryMethods.join(', ')}`, 'gray');
+      this.logger.info(`信頼度: ${(result.confidence * 100).toFixed(1)}%`);
+      this.logger.info('');
     }
 
-    console.log(chalk.yellow.bold('📝 統合分析:'));
-    console.log(result.synthesis);
-    console.log('');
+    Logger.infoMultiColored('📝 統合分析:', 'yellow', 'bold');
+    this.logger.info(result.synthesis);
+    this.logger.info('');
 
     if (result.actionItems.length > 0) {
-      console.log(chalk.red.bold('🎯 アクションアイテム:'));
+      Logger.infoMultiColored('🎯 アクションアイテム:', 'red', 'bold');
       result.actionItems.forEach((item: string, index: number) => {
-        console.log(`${index + 1}. ${item}`);
+        this.logger.info(`${index + 1}. ${item}`);
       });
-      console.log('');
+      this.logger.info('');
     }
 
     if (result.nextSteps.length > 0) {
-      console.log(chalk.cyan.bold('➡️  次のステップ:'));
+      Logger.infoMultiColored('➡️  次のステップ:', 'cyan', 'bold');
       result.nextSteps.forEach((step: string, index: number) => {
-        console.log(`${index + 1}. ${step}`);
+        this.logger.info(`${index + 1}. ${step}`);
       });
     }
   }
@@ -353,19 +352,19 @@ class ThinkingCLI {
    */
   private displaySingleResult(result: ThinkingResult, quiet: boolean): void {
     if (!quiet) {
-      console.log(chalk.blue.bold(`🧠 思考法: ${result.method}`));
-      console.log(`信頼度: ${(result.confidence * 100).toFixed(1)}%`);
-      console.log(`ステータス: ${result.status}`);
-      console.log('');
+      Logger.infoMultiColored(`🧠 思考法: ${result.method}`, 'blue', 'bold');
+      this.logger.info(`信頼度: ${(result.confidence * 100).toFixed(1)}%`);
+      this.logger.info(`ステータス: ${result.status}`);
+      this.logger.info('');
     }
 
-    console.log(chalk.yellow.bold('📝 推論:'));
-    console.log(result.reasoning);
-    console.log('');
+    Logger.infoMultiColored('📝 推論:', 'yellow', 'bold');
+    this.logger.info(result.reasoning);
+    this.logger.info('');
 
     if (result.output) {
-      console.log(chalk.green.bold('📊 結果:'));
-      console.log(JSON.stringify(result.output, null, 2));
+      Logger.infoMultiColored('📊 結果:', 'green', 'bold');
+      this.logger.info(JSON.stringify(result.output, null, 2));
     }
   }
 
@@ -415,7 +414,7 @@ class ThinkingCLI {
    * 有効な局面一覧表示
    */
   private printValidPhases(): void {
-    console.log(chalk.yellow('有効な局面:'));
+    Logger.warnColored('有効な局面:', 'yellow');
     const phases = [
       'business_exploration', 'requirement_definition', 'value_hypothesis',
       'architecture_design', 'prioritization', 'estimation_planning',
@@ -423,19 +422,19 @@ class ThinkingCLI {
       'test_design', 'experimentation', 'decision_making', 'retrospective',
       'hypothesis_breakdown'
     ];
-    phases.forEach(phase => console.log(`  ${phase}`));
+    phases.forEach(phase => this.logger.info(`  ${phase}`));
   }
 
   /**
    * 有効な思考法一覧表示
    */
   private printValidMethods(): void {
-    console.log(chalk.yellow('有効な思考法:'));
+    Logger.warnColored('有効な思考法:', 'yellow');
     const methods = [
       'abduction', 'logical', 'critical', 'mece', 'deductive',
       'inductive', 'pac', 'meta', 'debate'
     ];
-    methods.forEach(method => console.log(`  ${method}`));
+    methods.forEach(method => this.logger.info(`  ${method}`));
   }
 
   /**
@@ -449,10 +448,11 @@ class ThinkingCLI {
     });
     
     if (verbose) {
-      console.error(chalk.red('詳細エラー:'), error);
+      Logger.errorColored('詳細エラー:', 'red');
+      this.logger.error(error);
     } else {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(chalk.red(`エラー: ${message}`));
+      Logger.errorColored(`エラー: ${message}`, 'red');
     }
     process.exit(1);
   }
@@ -471,5 +471,5 @@ main().catch((error) => {
     error: error instanceof Error ? error.message : 'Unknown error',
     stack: error instanceof Error ? error.stack : undefined
   });
-  console.error(error);
+  logger.error(error);
 });
