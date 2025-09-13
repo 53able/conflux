@@ -67,6 +67,36 @@ export class LogicalThinkingAgent extends BaseThinkingAgent {
   /**
    * ロジカルシンキング特有の信頼度計算
    */
+  /**
+   * ロジカル思考特有の入力正規化
+   */
+  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
+    const normalized = { ...input };
+
+    // 必須フィールドの正規化
+    if (!normalized.question) {
+      // questionが不足している場合、contentやtextから生成
+      const content = normalized.content || normalized.text || normalized.message || '';
+      normalized.question = content;
+    }
+
+    // informationの正規化
+    if (!normalized.information) {
+      normalized.information = [];
+    } else if (typeof normalized.information === 'string') {
+      normalized.information = [normalized.information];
+    }
+
+    // constraintsの正規化
+    if (!normalized.constraints) {
+      normalized.constraints = [];
+    } else if (typeof normalized.constraints === 'string') {
+      normalized.constraints = [normalized.constraints];
+    }
+
+    return normalized;
+  }
+
   protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const logicalOutput = output as LogicalOutput;
     

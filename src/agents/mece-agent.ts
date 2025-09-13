@@ -60,6 +60,37 @@ export class MECEAgent extends BaseThinkingAgent {
     return result as Record<string, unknown>;
   }
 
+  /**
+   * MECE思考特有の入力正規化
+   */
+  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
+    const normalized = { ...input };
+
+    // 必須フィールドの正規化
+    if (!normalized.purpose) {
+      // purposeが不足している場合、contentやtextから生成
+      const content = normalized.content || normalized.text || normalized.message || '';
+      normalized.purpose = content;
+    }
+
+    // itemsの正規化
+    if (!normalized.items) {
+      normalized.items = [];
+    } else if (typeof normalized.items === 'string') {
+      normalized.items = [normalized.items];
+    } else if (Array.isArray(normalized.items)) {
+      // 配列の各要素が文字列でない場合は文字列に変換
+      normalized.items = normalized.items.map(item => String(item));
+    }
+
+    // proposedCriteriaの正規化
+    if (!normalized.proposedCriteria) {
+      normalized.proposedCriteria = '';
+    }
+
+    return normalized;
+  }
+
   protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const meceOutput = output as MECEOutput;
     

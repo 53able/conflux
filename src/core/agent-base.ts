@@ -83,13 +83,55 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
     const startTime = Date.now();
     
     try {
-      // 1. 入力検証
+      // 0. 早期リターンチェック
+      if (this.shouldEarlyReturn(_input)) {
+        this.logger.warn('Input is empty or meaningless, skipping processing', {
+          methodType: this.capability.methodType,
+          input: _input
+        });
+        
+        return this.createEarlyReturnResult(_input, 'Input is empty or meaningless');
+      }
+
+      // 1. 入力検証とフォールバック処理
+      let processedInput = _input;
+      let inputWasNormalized = false;
+
       if (!this.validateInput(_input)) {
-        return this.createFailureResult(_input, 'Invalid input provided');
+        this.logger.warn('Input validation failed, attempting normalization', {
+          methodType: this.capability.methodType,
+          input: _input
+        });
+
+        // フォールバック処理：入力データを正規化
+        processedInput = this.normalizeInput(_input);
+        inputWasNormalized = true;
+
+        // 正規化後も検証に失敗し、かつ早期リターンすべき場合は処理をスキップ
+        if (!this.validateInput(processedInput) && this.shouldEarlyReturn(processedInput)) {
+          this.logger.warn('Normalized input is still meaningless, skipping processing', {
+            methodType: this.capability.methodType,
+            originalInput: _input,
+            normalizedInput: processedInput
+          });
+          
+          return this.createEarlyReturnResult(_input, 'Normalized input is still meaningless');
+        }
+
+        // 正規化後も検証に失敗する場合は、推奨スキーマと再リクエスト指示を返す
+        if (!this.validateInput(processedInput)) {
+          this.logger.warn('Input normalization failed, returning schema guidance', {
+            methodType: this.capability.methodType,
+            originalInput: _input,
+            normalizedInput: processedInput
+          });
+          
+          return this.createSchemaGuidanceResult(_input, processedInput, 'Input normalization failed');
+        }
       }
 
       // 2. 前処理
-      const preprocessedInput = await this.preprocess(_input, _context);
+      const preprocessedInput = await this.preprocess(processedInput, _context);
 
       // 3. LLMによる思考実行
       const output = await this.executeLLMThinking(preprocessedInput, _context);
@@ -102,7 +144,7 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
         { 
           method: this.capability.methodType, 
           status: 'completed' as ThinkingProcessStatus,
-          input: _input as Record<string, unknown>,
+          input: processedInput as Record<string, unknown>,
           output: validatedOutput,
           confidence: 0.8,
           reasoning: ''
@@ -111,20 +153,32 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
       );
 
       // 6. 結果オブジェクト構築
-      return {
+      const result = {
         method: this.capability.methodType,
         status: 'completed' as ThinkingProcessStatus,
-        input: _input as Record<string, unknown>,
+        input: processedInput as Record<string, unknown>,
         output: validatedOutput,
         confidence: this.calculateConfidence(validatedOutput, _context),
-        reasoning: this.generateReasoningExplanation(_input, validatedOutput, _context),
+        reasoning: this.generateReasoningExplanation(processedInput, validatedOutput, _context),
         nextRecommendations: recommendations,
         metadata: {
           executionTime: Date.now() - startTime,
           timestamp: new Date().toISOString(),
+          inputWasNormalized,
           ..._context.metadata,
         },
       };
+
+      // 入力が正規化された場合は、その旨をログに記録
+      if (inputWasNormalized) {
+        this.logger.info('Input was successfully normalized and processed', {
+          methodType: this.capability.methodType,
+          originalInput: _input,
+          normalizedInput: processedInput
+        });
+      }
+
+      return result;
 
     } catch (error) {
       this.logger.error('Agent execution error', {
@@ -147,6 +201,248 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * 入力データが早期リターンすべきかチェック
+   */
+  protected shouldEarlyReturn(input: unknown): boolean {
+    // null, undefined, 空文字列
+    if (input === null || input === undefined || input === '') {
+      return true;
+    }
+
+    // 空のオブジェクト
+    if (typeof input === 'object' && input !== null) {
+      const inputObj = input as Record<string, unknown>;
+      const keys = Object.keys(inputObj);
+      if (keys.length === 0) {
+        return true;
+      }
+      
+      // すべての値が空文字列、null、undefinedの場合
+      const allValuesEmpty = keys.every(key => {
+        const value = inputObj[key];
+        return value === null || value === undefined || value === '' || 
+               (Array.isArray(value) && value.length === 0);
+      });
+      
+      if (allValuesEmpty) {
+        return true;
+      }
+    }
+
+    // 文字列の場合、空白文字のみかチェック
+    if (typeof input === 'string' && input.trim() === '') {
+      return true;
+    }
+
+    // オブジェクトの場合、すべての値が空白文字のみかチェック
+    if (typeof input === 'object' && input !== null) {
+      const inputObj = input as Record<string, unknown>;
+      const allValuesWhitespace = Object.values(inputObj).every(value => {
+        if (typeof value === 'string') {
+          return value.trim() === '';
+        }
+        if (Array.isArray(value)) {
+          return value.length === 0 || value.every(item => typeof item === 'string' && item.trim() === '');
+        }
+        return value === null || value === undefined || value === '';
+      });
+      
+      if (allValuesWhitespace) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * 入力データの正規化（フォールバック処理）
+   * スキーマ検証に失敗した場合に、可能な限りデータを正規化して再試行
+   */
+  protected normalizeInput(input: unknown): unknown {
+    if (!input || typeof input !== 'object') {
+      return this.createFallbackInput(input);
+    }
+
+    const inputObj = input as Record<string, unknown>;
+    const normalizedInput = { ...inputObj };
+
+    // 各エージェントのスキーマに応じた正規化
+    return this.performSchemaSpecificNormalization(normalizedInput);
+  }
+
+  /**
+   * スキーマ固有の正規化処理（サブクラスでオーバーライド）
+   */
+  protected performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
+    return input;
+  }
+
+  /**
+   * フォールバック用の入力データ作成
+   */
+  protected createFallbackInput(input: unknown): Record<string, unknown> {
+    // 基本的なフォールバック入力を作成
+    if (typeof input === 'string') {
+      return { content: input };
+    }
+    
+    if (input && typeof input === 'object') {
+      const inputObj = input as Record<string, unknown>;
+      // 既存のフィールドを保持しつつ、不足分を補完
+      return {
+        content: inputObj.content || inputObj.text || inputObj.message || '',
+        context: inputObj.context || '',
+        ...inputObj
+      };
+    }
+
+    return { content: String(input) };
+  }
+
+  /**
+   * 早期リターン用の結果作成
+   */
+  protected createEarlyReturnResult(input: unknown, reason: string): ThinkingResult {
+    // 推奨データ構造を生成
+    const recommendedSchema = this.generateSchemaExample(this.capability.requiredInputSchema);
+    
+    return {
+      method: this.capability.methodType,
+      status: 'failed' as ThinkingProcessStatus,
+      input: input as Record<string, unknown>,
+      output: {
+        error: reason,
+        message: 'Processing skipped due to empty or meaningless input',
+        recommendedInputSchema: recommendedSchema,
+        retryInstructions: `入力例を確認してからエラーの原因を特定し、正しい形式で再実行してください。\n\n推奨データ構造:\n${recommendedSchema}`,
+        mcpClientInstructions: {
+          action: 'retry_with_correct_schema',
+          message: '入力データが不正です。推奨スキーマに従って再リクエストしてください。',
+          mcpToolName: this.getMCPToolName(),
+          recommendedSchema: JSON.parse(recommendedSchema),
+          examples: this.generateInputExamples()
+        }
+      },
+      confidence: 0.0,
+      reasoning: `入力データが空または意味がないため、${this.capability.methodType}思考をスキップしました。理由: ${reason}`,
+      nextRecommendations: [],
+      metadata: {
+        executionTime: 0,
+        timestamp: new Date().toISOString(),
+        earlyReturn: true,
+        reason,
+        schemaValidationFailed: true
+      },
+    };
+  }
+
+  /**
+   * 入力例を生成するメソッド
+   */
+  protected generateInputExamples(): Record<string, unknown>[] {
+    try {
+      const schema = this.capability.requiredInputSchema;
+      const jsonSchema = z.toJSONSchema(schema);
+      const example = this.createExampleFromJSONSchema(jsonSchema);
+      return [example as Record<string, unknown>];
+    } catch (error) {
+      this.logger.warn('Failed to generate input examples', {
+        methodType: this.capability.methodType,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return [{}];
+    }
+  }
+
+  /**
+   * スキーマガイダンス用の結果作成（正規化失敗時）
+   */
+  protected createSchemaGuidanceResult(
+    originalInput: unknown, 
+    normalizedInput: unknown, 
+    reason: string
+  ): ThinkingResult {
+    // 推奨データ構造を生成
+    const recommendedSchema = this.generateSchemaExample(this.capability.requiredInputSchema);
+    
+    return {
+      method: this.capability.methodType,
+      status: 'failed' as ThinkingProcessStatus,
+      input: originalInput as Record<string, unknown>,
+      output: {
+        error: reason,
+        message: 'Input data could not be normalized to match required schema',
+        originalInput: originalInput,
+        normalizedInput: normalizedInput,
+        recommendedInputSchema: recommendedSchema,
+        retryInstructions: `入力データを正規化できませんでした。推奨スキーマに従って正しい形式で再実行してください。\n\n推奨データ構造:\n${recommendedSchema}`,
+        mcpClientInstructions: {
+          action: 'retry_with_correct_schema',
+          message: '入力データの形式が不正です。推奨スキーマに従って再リクエストしてください。',
+          mcpToolName: this.getMCPToolName(),
+          recommendedSchema: JSON.parse(recommendedSchema),
+          examples: this.generateInputExamples(),
+          validationErrors: this.getValidationErrors(normalizedInput)
+        }
+      },
+      confidence: 0.0,
+      reasoning: `入力データの正規化に失敗したため、${this.capability.methodType}思考を実行できませんでした。理由: ${reason}`,
+      nextRecommendations: [],
+      metadata: {
+        executionTime: 0,
+        timestamp: new Date().toISOString(),
+        schemaValidationFailed: true,
+        normalizationFailed: true,
+        reason
+      },
+    };
+  }
+
+  /**
+   * バリデーションエラーの詳細を取得
+   */
+  protected getValidationErrors(input: unknown): string[] {
+    try {
+      this.capability.requiredInputSchema.parse(input);
+      return [];
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return error.issues.map((err: z.ZodIssue) => `${err.path.join('.')}: ${err.message}`);
+      }
+      return ['Unknown validation error'];
+    }
+  }
+
+  /**
+   * MCPツール名を取得
+   */
+  protected getMCPToolName(): string {
+    const methodType = this.capability.methodType;
+    
+    // 単一思考法のMCPツール名
+    const singleMethodToolName = `process-single-method`;
+    
+    // 局面別思考プロセスのMCPツール名
+    const phaseToolName = `process-phase`;
+    
+    // 黄金パターンのMCPツール名
+    const goldenPatternToolName = `process-golden-pattern`;
+    
+    return {
+      'abduction': singleMethodToolName,
+      'logical': singleMethodToolName,
+      'deductive': singleMethodToolName,
+      'inductive': singleMethodToolName,
+      'mece': singleMethodToolName,
+      'pac': singleMethodToolName,
+      'meta': singleMethodToolName,
+      'debate': singleMethodToolName,
+      'critical': singleMethodToolName,
+    }[methodType] || singleMethodToolName;
   }
 
   /**

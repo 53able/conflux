@@ -70,6 +70,34 @@ export class CriticalThinkingAgent extends BaseThinkingAgent {
   /**
    * クリティカルシンキング特有の信頼度計算
    */
+  /**
+   * クリティカル思考特有の入力正規化
+   */
+  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
+    const normalized = { ...input };
+
+    // 必須フィールドの正規化
+    if (!normalized.claim) {
+      // claimが不足している場合、contentやtextから生成
+      const content = normalized.content || normalized.text || normalized.message || '';
+      normalized.claim = content;
+    }
+
+    // evidenceの正規化
+    if (!normalized.evidence) {
+      normalized.evidence = [];
+    } else if (typeof normalized.evidence === 'string') {
+      normalized.evidence = [normalized.evidence];
+    }
+
+    // contextの正規化
+    if (!normalized.context) {
+      normalized.context = '';
+    }
+
+    return normalized;
+  }
+
   protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const criticalOutput = output as CriticalOutput;
     

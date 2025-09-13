@@ -44,6 +44,27 @@ export class MetaThinkingAgent extends BaseThinkingAgent {
     return result as Record<string, unknown>;
   }
 
+  /**
+   * メタ思考特有の入力正規化
+   */
+  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
+    const normalized = { ...input };
+
+    // 必須フィールドの正規化
+    if (!normalized.currentThinking) {
+      // currentThinkingが不足している場合、contentやtextから生成
+      const content = normalized.content || normalized.text || normalized.message || '';
+      normalized.currentThinking = content;
+    }
+
+    if (!normalized.objective) {
+      // objectiveが不足している場合、デフォルト値を設定
+      normalized.objective = '思考プロセスの改善';
+    }
+
+    return normalized;
+  }
+
   protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const metaOutput = output as MetaOutput;
     

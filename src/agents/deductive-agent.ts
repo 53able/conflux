@@ -59,6 +59,33 @@ export class DeductiveThinkingAgent extends BaseThinkingAgent {
     return result as Record<string, unknown>;
   }
 
+  /**
+   * 演繹的思考特有の入力正規化
+   */
+  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
+    const normalized = { ...input };
+
+    // 必須フィールドの正規化
+    if (!normalized.majorPremise) {
+      // majorPremiseが不足している場合、contentやtextから生成
+      const content = normalized.content || normalized.text || normalized.message || '';
+      normalized.majorPremise = content;
+    }
+
+    if (!normalized.minorPremise) {
+      // minorPremiseが不足している場合、contextや追加情報から生成
+      const context = normalized.context || normalized.additionalInfo || '';
+      normalized.minorPremise = context || '具体的な状況';
+    }
+
+    // domainの正規化
+    if (!normalized.domain) {
+      normalized.domain = '';
+    }
+
+    return normalized;
+  }
+
   protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
     const deductiveOutput = output as DeductiveOutput;
     
