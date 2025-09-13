@@ -7,7 +7,7 @@ import {
   DevelopmentPhase 
 } from '../schemas/thinking.js';
 import type { LLMProvider, LanguageModel } from './llm-provider.js';
-import { LLMIntegration } from './llm-provider.js';
+import { LLMIntegration, DEFAULT_CONFIGS } from './llm-provider.js';
 import { Logger } from './logger.js';
 
 /**
@@ -588,13 +588,13 @@ export abstract class BaseThinkingAgent implements IThinkingAgent {
         
         let model;
         if (defaultProvider === 'anthropic') {
-          const modelName = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-latest';
+          const modelName = process.env.ANTHROPIC_MODEL || DEFAULT_CONFIGS.anthropic.model!;
           model = anthropic(modelName);
         } else if (defaultProvider === 'google') {
-          const modelName = process.env.GOOGLE_MODEL || 'gemini-2.0-flash-exp';
+          const modelName = process.env.GOOGLE_MODEL || DEFAULT_CONFIGS.google.model!;
           model = google(modelName);
         } else {
-          const modelName = process.env.OPENAI_MODEL || 'gpt-5';
+          const modelName = process.env.OPENAI_MODEL || DEFAULT_CONFIGS.openai.model!;
           model = openai(modelName);
         }
 
