@@ -17,23 +17,13 @@ import {
   ThinkingMethodType, 
   DevelopmentPhase
 } from '../schemas/thinking.js';
-import { createLogger, transports, format } from 'winston';
+import { Logger } from '../core/logger.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 // Logger setup
-const logger = createLogger({
-  level: 'info',
-  format: format.combine(
-    format.timestamp(),
-    format.json()
-  ),
-  transports: [
-    new transports.Console(),
-    new transports.File({ filename: 'mcp-server.log' })
-  ]
-});
+const logger = Logger.getInstance();
 
 /**
  * MCPツールの入力スキーマ定義
@@ -300,12 +290,13 @@ export class ThinkingMethodsMCPServer {
   private setupErrorHandlers(): void {
     this.server.onerror = (error) => {
       logger.error('[MCP Server Error]', { error });
-      console.error('[MCP Server Error]', error);
+      Logger.errorColored('[MCP Server Error]', 'red');
+      logger.error(error);
     };
 
     process.on('SIGINT', async () => {
       logger.info('Shutting down MCP server...');
-      console.log('Shutting down MCP server...');
+      Logger.infoColored('Shutting down MCP server...', 'cyan');
       await this.server.close();
       process.exit(0);
     });
@@ -314,18 +305,21 @@ export class ThinkingMethodsMCPServer {
       // JSONパースエラーの特別処理
       if (error instanceof SyntaxError && error.message.includes('JSON')) {
         logger.error('JSON Parse Error:', { error: error.message });
-        console.error('JSON Parse Error:', error.message);
+        Logger.errorColored('JSON Parse Error:', 'red');
+        logger.error(error.message);
         // JSONパースエラーの場合は再起動ではなく、エラーレスポンスを返す
         return;
       }
       logger.error('Uncaught Exception', { error });
-      console.error('Uncaught Exception:', error);
+      Logger.errorColored('Uncaught Exception:', 'red');
+      logger.error(error);
       process.exit(1);
     });
 
     process.on('unhandledRejection', (reason, promise) => {
       logger.error('Unhandled Rejection', { reason, promise });
-      console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+      Logger.errorColored('Unhandled Rejection at:', 'red');
+      logger.error(`Promise: ${promise}, Reason: ${reason}`);
       process.exit(1);
     });
   }
@@ -559,7 +553,7 @@ export class ThinkingMethodsMCPServer {
   async start(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error(`Thinking Methods MCP Server running on stdio, port: ${process.env.PORT || 3000}`);
+    Logger.infoColored(`Thinking Methods MCP Server running on stdio, port: ${process.env.PORT || 3000}`, 'cyan');
   }
 }
 
@@ -572,7 +566,8 @@ async function main() {
 // スクリプトとして実行された場合のみmainを実行
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((error) => {
-    console.error('Failed to start server:', error);
+    Logger.errorColored('Failed to start server:', 'red');
+    logger.error(error);
     process.exit(1);
   });
 }
