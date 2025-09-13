@@ -48,6 +48,15 @@ const ProcessSingleMethodInputSchema = z.object({
   userId: z.string().optional(),
 });
 
+const ProcessCustomStrategyInputSchema = z.object({
+  primary: ThinkingMethodType.describe('主要思考法'),
+  secondary: z.array(ThinkingMethodType).describe('併用思考法'),
+  sequence: z.array(ThinkingMethodType).min(1).describe('実行する思考法の順序'),
+  input: z.record(z.string(), z.unknown()),
+  llmProvider: z.string().optional(),
+  userId: z.string().optional(),
+});
+
 /**
  * 思考法MCPサーバー
  * 
@@ -55,8 +64,9 @@ const ProcessSingleMethodInputSchema = z.object({
  * 1. process-phase - 局面に応じた統合思考プロセス
  * 2. process-golden-pattern - 黄金パターン（探索→実装）の実行
  * 3. process-single-method - 単一思考法の実行
- * 4. list-thinking-methods - 利用可能な思考法の一覧
- * 5. get-phase-recommendations - 局面別推奨思考法の取得
+ * 4. process-custom-strategy - PHASE_THINKING_MAP形式で思考法戦略を指定して実行
+ * 5. list-thinking-methods - 利用可能な思考法の一覧
+ * 6. get-phase-recommendations - 局面別推奨思考法の取得
  */
 export class ThinkingMethodsMCPServer {
   private server: Server;
@@ -234,6 +244,82 @@ export class ThinkingMethodsMCPServer {
             required: ['phase'],
           },
         },
+        {
+          name: 'process-custom-strategy',
+          description: 'PHASE_THINKING_MAP形式で思考法戦略を指定して実行します',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              primary: {
+                type: 'string',
+                enum: [
+                  'abduction',
+                  'logical',
+                  'deductive',
+                  'inductive',
+                  'mece',
+                  'pac',
+                  'meta',
+                  'debate',
+                  'critical',
+                ],
+                description: '主要思考法',
+              },
+              secondary: {
+                type: 'array',
+                items: {
+                  type: 'string',
+                  enum: [
+                    'abduction',
+                    'logical',
+                    'deductive',
+                    'inductive',
+                    'mece',
+                    'pac',
+                    'meta',
+                    'debate',
+                    'critical',
+                  ],
+                },
+                description: '併用思考法',
+              },
+              sequence: {
+                type: 'array',
+                items: {
+                  type: 'string',
+                  enum: [
+                    'abduction',
+                    'logical',
+                    'deductive',
+                    'inductive',
+                    'mece',
+                    'pac',
+                    'meta',
+                    'debate',
+                    'critical',
+                  ],
+                },
+                minItems: 1,
+                description: '実行する思考法の順序',
+              },
+              input: {
+                type: 'object',
+                description: '分析対象の入力データ',
+              },
+              llmProvider: {
+                type: 'string',
+                description: 'LLMプロバイダー設定',
+                optional: true,
+              },
+              userId: {
+                type: 'string',
+                description: 'ユーザーID',
+                optional: true,
+              },
+            },
+            required: ['primary', 'secondary', 'sequence', 'input'],
+          },
+        },
       ] as Tool[],
     }));
 
@@ -259,6 +345,8 @@ export class ThinkingMethodsMCPServer {
             return await this.handleProcessGoldenPattern(args);
           case 'process-single-method':
             return await this.handleProcessSingleMethod(args);
+          case 'process-custom-strategy':
+            return await this.handleProcessCustomStrategy(args);
           case 'list-thinking-methods':
             return await this.handleListThinkingMethods();
           case 'get-phase-recommendations':
@@ -426,6 +514,51 @@ export class ThinkingMethodsMCPServer {
       };
     } catch (error) {
       logger.error('Error in handleProcessSingleMethod', { error, args });
+      throw error;
+    }
+  }
+
+  /**
+   * カスタム戦略実行ハンドラー
+   */
+  private async handleProcessCustomStrategy(args: unknown) {
+    try {
+      logger.info('Processing custom strategy request', { args });
+      const parsed = ProcessCustomStrategyInputSchema.parse(args);
+      logger.info('Custom strategy input parsed successfully', { parsed });
+      
+      const context = {
+        llmProvider: globalLLMManager.getProvider(),
+        llmIntegration: globalLLMManager.getIntegration(),
+        userId: parsed.userId || undefined,
+        sessionId: `strategy-${Date.now()}`,
+      };
+
+      const result = await this.orchestrator.processCustomStrategy(
+        {
+          primary: parsed.primary,
+          secondary: parsed.secondary,
+          sequence: parsed.sequence
+        },
+        parsed.input,
+        context
+      );
+
+      logger.info('Custom strategy processing completed', { result });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error('Error in handleProcessCustomStrategy', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        args,
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw error;
     }
   }
