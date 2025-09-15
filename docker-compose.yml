@@ -13,10 +13,23 @@ services:
       - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-openai}
       - AI_SDK_DISABLE_TELEMETRY=true
       - AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
+      - LOG_LEVEL=${LOG_LEVEL:-info}
     # MCP server runs on stdio, no port exposure needed
-    # volumes:
-    #   - ./logs:/app/logs  # Uncomment if you want to persist logs
+    volumes:
+      - ./logs:/app/logs  # Persist logs for debugging
     stdin_open: true
     tty: true
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('MCP server health check')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 

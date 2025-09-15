@@ -46,7 +46,28 @@ coverage/
 logs/
 *.log
 mcp-server.log
+mcp-server-debug.log
 
 # Temporary files
 tmp/
 temp/
+unsaved/
+
+# Development files
+tsconfig.json
+eslint.config.js
+vitest.config.*
+
+# Docker files (avoid recursive copying)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Keep scripts directory for Docker
+!scripts/
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
