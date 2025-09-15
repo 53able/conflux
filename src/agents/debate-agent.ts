@@ -12,7 +12,7 @@ import {
   DevelopmentPhase
 } from '../schemas/index.js';
 import * as E from 'fp-ts/lib/Either.js';
-import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { extractSchemaRequirements } from '../core/schema-utils.js';
 import { type DebateInput, type DebateOutput, DebateInputSchema, DebateOutputSchema } from '../schemas/index.js';
 
 /**
@@ -60,9 +60,8 @@ const debateConfig: AgentConfig = {
 
 // プロンプト生成関数
 const generateDebatePrompts: PromptGenerator<DebateInput> = (input, capability) => {
-  // スキーマから動的にJSON例と注意事項を生成
-  const schemaExample = generateSchemaExample(capability.outputSchema);
-  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
+  // スキーマから統合された要件を生成
+  const schemaRequirements = extractSchemaRequirements(capability.outputSchema);
 
   const systemPrompt = `あなたはディベート思考の専門家です。複数の視点から論点を検討し、バランスの取れた結論を導いてください。
 
@@ -75,10 +74,7 @@ const generateDebatePrompts: PromptGenerator<DebateInput> = (input, capability) 
 
 重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-${schemaExample}
-
-注意事項:
-${schemaInstructions}
+${schemaRequirements}
 
 ディベート思考の本質である「多角的視点」を重視し、公平で建設的な分析を行ってください。`;
 

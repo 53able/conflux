@@ -12,7 +12,7 @@ import {
   DevelopmentPhase, 
 } from '../schemas/index.js';
 import * as E from 'fp-ts/lib/Either.js';
-import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { extractSchemaRequirements } from '../core/schema-utils.js';
 import { type DeductiveInput, type DeductiveOutput, DeductiveInputSchema, DeductiveOutputSchema } from '../schemas/index.js';
 
 /**
@@ -62,9 +62,8 @@ const deductiveConfig: AgentConfig = {
 
 // プロンプト生成関数
 const generateDeductivePrompts: PromptGenerator<DeductiveInput> = (input, capability) => {
-  // スキーマから動的にJSON例と注意事項を生成
-  const schemaExample = generateSchemaExample(capability.outputSchema);
-  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
+  // スキーマから統合された要件を生成
+  const schemaRequirements = extractSchemaRequirements(capability.outputSchema);
 
   const systemPrompt = `あなたは演繹的思考の専門家です。大前提と小前提から論理的に結論を導いてください。
 
@@ -77,10 +76,7 @@ const generateDeductivePrompts: PromptGenerator<DeductiveInput> = (input, capabi
 
 重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-${schemaExample}
-
-注意事項:
-${schemaInstructions}
+${schemaRequirements}
 
 演繹的思考の本質である「一般から特殊へ」の論理的推論を重視し、厳密で正確な結論導出を行ってください。`;
 

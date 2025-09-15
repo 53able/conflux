@@ -12,7 +12,7 @@ import {
   DevelopmentPhase, 
 } from '../schemas/index.js';
 import * as E from 'fp-ts/lib/Either.js';
-import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { extractSchemaRequirements } from '../core/schema-utils.js';
 import { type LogicalInput, type LogicalOutput, LogicalInputSchema, LogicalOutputSchema } from '../schemas/index.js';
 
 /**
@@ -63,9 +63,8 @@ const logicalConfig: AgentConfig = {
 
 // プロンプト生成関数
 const generateLogicalPrompts: PromptGenerator<LogicalInput> = (input, capability) => {
-  // スキーマから動的にJSON例と注意事項を生成
-  const schemaExample = generateSchemaExample(capability.outputSchema);
-  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
+  // スキーマから統合された要件を生成
+  const schemaRequirements = extractSchemaRequirements(capability.outputSchema);
 
   const systemPrompt = `あなたはロジカルシンキングの専門家です。論点から結論への論理的道筋を構築してください。
 
@@ -78,10 +77,7 @@ const generateLogicalPrompts: PromptGenerator<LogicalInput> = (input, capability
 
 重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-${schemaExample}
-
-注意事項:
-${schemaInstructions}
+${schemaRequirements}
 
 ロジカルシンキングの本質である「論理的思考」を重視し、明確で一貫した結論構築を行ってください。`;
 

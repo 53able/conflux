@@ -13,7 +13,7 @@ import {
 } from '../schemas/index.js';
 import * as E from 'fp-ts/lib/Either.js';
 import { pipe } from 'fp-ts/lib/function.js';
-import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { extractSchemaRequirements } from '../core/schema-utils.js';
 import { type InductiveInput, type InductiveOutput, InductiveInputSchema, InductiveOutputSchema } from '../schemas/index.js';
 
 /**
@@ -61,9 +61,8 @@ const inductiveConfig: AgentConfig = {
 
 // プロンプト生成関数
 const generateInductivePrompts: PromptGenerator<InductiveInput> = (input, capability) => {
-  // スキーマから動的にJSON例と注意事項を生成
-  const schemaExample = generateSchemaExample(capability.outputSchema);
-  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
+  // スキーマから統合された要件を生成
+  const schemaRequirements = extractSchemaRequirements(capability.outputSchema);
 
   const systemPrompt = `あなたは帰納的思考の専門家です。観察データを分析してパターンと一般化を発見してください。
 
@@ -75,10 +74,7 @@ const generateInductivePrompts: PromptGenerator<InductiveInput> = (input, capabi
 
 重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-${schemaExample}
-
-注意事項:
-${schemaInstructions}
+${schemaRequirements}
 
 帰納的思考の本質である「個別から一般へ」の推論を重視し、慎重かつ論理的な分析を行ってください。`;
 
