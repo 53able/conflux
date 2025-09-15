@@ -27,6 +27,9 @@ export type {
   LanguageModel,
   LLMProviderConfig,
   LLMProviderType,
+} from './core/index.js';
+
+export {
   // 定数
   APP_CONFIG,
   LLM_DEFAULT_CONFIG,
