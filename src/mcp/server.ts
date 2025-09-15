@@ -1,64 +1,29 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
-  ErrorCode,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
   McpError,
-  type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
-import { ThinkingOrchestrator } from '../orchestrator/thinking-orchestrator.js';
-import { globalLLMManager } from '../core/llm-provider.js';
-import { 
-  ThinkingMethodType, 
-  DevelopmentPhase
-} from '../schemas/thinking.js';
-import { Logger } from '../core/logger.js';
+import { getLogger } from '../core/index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import * as TE from 'fp-ts/lib/TaskEither.js';
+import { pipe } from 'fp-ts/lib/function.js';
+import { getToolsList, executeToolByName } from './tool-handlers.js';
+import { getVersion } from './utils.js';
+import { SERVER_CONFIG, LOG_MESSAGES } from './constants.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 // Logger setup
-const logger = Logger.getInstance();
+const logger = getLogger();
 
 /**
- * MCPツールの入力スキーマ定義
- */
-const ProcessPhaseInputSchema = z.object({
-  phase: DevelopmentPhase,
-  input: z.record(z.string(), z.unknown()),
-  llmProvider: z.string().optional(),
-  userId: z.string().optional(),
-});
-
-const ProcessGoldenPatternInputSchema = z.object({
-  input: z.record(z.string(), z.unknown()),
-  llmProvider: z.string().optional(),
-  userId: z.string().optional(),
-});
-
-const ProcessSingleMethodInputSchema = z.object({
-  method: ThinkingMethodType,
-  input: z.record(z.string(), z.unknown()),
-  llmProvider: z.string().optional(),
-  userId: z.string().optional(),
-});
-
-const ProcessCustomStrategyInputSchema = z.object({
-  primary: ThinkingMethodType.describe('主要思考法'),
-  secondary: z.array(ThinkingMethodType).describe('併用思考法'),
-  sequence: z.array(ThinkingMethodType).min(1).describe('実行する思考法の順序'),
-  input: z.record(z.string(), z.unknown()),
-  llmProvider: z.string().optional(),
-  userId: z.string().optional(),
-});
-
-/**
- * 思考法MCPサーバー
+ * 思考法MCPサーバー（関数型スタイル）
  * 
  * 提供するツール:
  * 1. process-phase - 局面に応じた統合思考プロセス
@@ -68,639 +33,174 @@ const ProcessCustomStrategyInputSchema = z.object({
  * 5. list-thinking-methods - 利用可能な思考法の一覧
  * 6. get-phase-recommendations - 局面別推奨思考法の取得
  */
-export class ThinkingMethodsMCPServer {
-  private server: Server;
-  private orchestrator: ThinkingOrchestrator;
 
-  constructor() {
-    this.server = new Server(
-      {
-        name: 'thinking-methods-mcp',
-        version: this.getVersion(),
+export function createThinkingMethodsMCPServer(): Server {
+  const server = new Server(
+    {
+      name: SERVER_CONFIG.NAME,
+      version: getVersion(),
+    },
+    {
+      capabilities: {
+        tools: {
+          listChanged: true,
+        },
+        prompts: {
+          listChanged: true,
+        },
       },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
+    }
+  );
 
-    this.orchestrator = new ThinkingOrchestrator();
-    this.setupToolHandlers();
-    this.setupErrorHandlers();
-  }
+  setupToolHandlers(server);
+  setupPromptHandlers(server);
+  setupErrorHandlers(server);
+  
+  logger.info(LOG_MESSAGES.SERVER_INITIALIZED, {
+    serverName: SERVER_CONFIG.NAME,
+    version: getVersion(),
+  });
+  
+  return server;
+}
 
-  /**
-   * ツールハンドラーをセットアップ
-   */
-  private setupToolHandlers(): void {
-    // ツール一覧の提供
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        {
-          name: 'process-phase',
-          description: '局面に応じた統合思考プロセスを実行します',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              phase: {
-                type: 'string',
-                enum: [
-                  'business_exploration',
-                  'requirement_definition', 
-                  'value_hypothesis',
-                  'architecture_design',
-                  'prioritization',
-                  'estimation_planning',
-                  'implementation',
-                  'debugging',
-                  'refactoring',
-                  'code_review',
-                  'test_design',
-                  'experimentation',
-                  'decision_making',
-                  'retrospective',
-                  'hypothesis_breakdown',
-                ],
-                description: '開発の局面',
-              },
-              input: {
-                type: 'object',
-                description: '分析対象の入力データ',
-              },
-              llmProvider: {
-                type: 'string',
-                description: 'LLMプロバイダー設定',
-                optional: true,
-              },
-              userId: {
-                type: 'string', 
-                description: 'ユーザーID',
-                optional: true,
-              },
-            },
-            required: ['phase', 'input'],
-          },
-        },
-        {
-          name: 'process-golden-pattern',
-          description: '黄金パターン（探索→実装）の統合思考プロセスを実行します',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              input: {
-                type: 'object',
-                description: '分析対象の入力データ',
-              },
-              llmProvider: {
-                type: 'string',
-                description: 'LLMプロバイダー設定',
-                optional: true,
-              },
-              userId: {
-                type: 'string',
-                description: 'ユーザーID', 
-                optional: true,
-              },
-            },
-            required: ['input'],
-          },
-        },
-        {
-          name: 'process-single-method',
-          description: '単一の思考法を実行します',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              method: {
-                type: 'string',
-                enum: [
-                  'abduction',
-                  'logical',
-                  'deductive',
-                  'inductive',
-                  'mece',
-                  'pac',
-                  'meta',
-                  'debate',
-                  'critical',
-                ],
-                description: '実行する思考法',
-              },
-              input: {
-                type: 'object',
-                description: '思考法への入力データ',
-              },
-              llmProvider: {
-                type: 'string',
-                description: 'LLMプロバイダー設定',
-                optional: true,
-              },
-              userId: {
-                type: 'string',
-                description: 'ユーザーID',
-                optional: true,
-              },
-            },
-            required: ['method', 'input'],
-          },
-        },
-        {
-          name: 'list-thinking-methods',
-          description: '利用可能な思考法の一覧と詳細を取得します',
-          inputSchema: {
-            type: 'object',
-            properties: {},
-          },
-        },
-        {
-          name: 'get-phase-recommendations',
-          description: '指定した局面に推奨される思考法を取得します',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              phase: {
-                type: 'string',
-                enum: [
-                  'business_exploration',
-                  'requirement_definition',
-                  'value_hypothesis',
-                  'architecture_design', 
-                  'prioritization',
-                  'estimation_planning',
-                  'implementation',
-                  'debugging',
-                  'refactoring',
-                  'code_review',
-                  'test_design',
-                  'experimentation',
-                  'decision_making',
-                  'retrospective',
-                  'hypothesis_breakdown',
-                ],
-                description: '開発の局面',
-              },
-            },
-            required: ['phase'],
-          },
-        },
-        {
-          name: 'process-custom-strategy',
-          description: 'PHASE_THINKING_MAP形式で思考法戦略を指定して実行します',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              primary: {
-                type: 'string',
-                enum: [
-                  'abduction',
-                  'logical',
-                  'deductive',
-                  'inductive',
-                  'mece',
-                  'pac',
-                  'meta',
-                  'debate',
-                  'critical',
-                ],
-                description: '主要思考法',
-              },
-              secondary: {
-                type: 'array',
-                items: {
-                  type: 'string',
-                  enum: [
-                    'abduction',
-                    'logical',
-                    'deductive',
-                    'inductive',
-                    'mece',
-                    'pac',
-                    'meta',
-                    'debate',
-                    'critical',
-                  ],
-                },
-                description: '併用思考法',
-              },
-              sequence: {
-                type: 'array',
-                items: {
-                  type: 'string',
-                  enum: [
-                    'abduction',
-                    'logical',
-                    'deductive',
-                    'inductive',
-                    'mece',
-                    'pac',
-                    'meta',
-                    'debate',
-                    'critical',
-                  ],
-                },
-                minItems: 1,
-                description: '実行する思考法の順序',
-              },
-              input: {
-                type: 'object',
-                description: '分析対象の入力データ',
-              },
-              llmProvider: {
-                type: 'string',
-                description: 'LLMプロバイダー設定',
-                optional: true,
-              },
-              userId: {
-                type: 'string',
-                description: 'ユーザーID',
-                optional: true,
-              },
-            },
-            required: ['primary', 'secondary', 'sequence', 'input'],
-          },
-        },
-      ] as Tool[],
-    }));
+/**
+ * ツールハンドラーをセットアップ
+ */
+function setupToolHandlers(server: Server): void {
+  // ツール一覧の提供
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    logger.info('ListTools request received');
+    const tools = getToolsList();
+    logger.info(LOG_MESSAGES.TOOLS_LIST_RETURNED, { toolsCount: tools.length, toolNames: tools.map(t => t.name) });
+    return { tools };
+  });
 
-    // ツール実行ハンドラー
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
+  // ツール実行ハンドラー（自己修復機能付き）
+  server.setRequestHandler(CallToolRequestSchema, async (request): Promise<{ [x: string]: unknown; _meta?: { [x: string]: unknown; } | undefined; }> => {
+    const { name, arguments: args } = request.params;
 
-      logger.info('Tool request received', { name, args });
+    logger.info(LOG_MESSAGES.TOOL_REQUEST_RECEIVED, { name, args });
 
-      try {
-        // 入力データの基本検証
-        if (!args || typeof args !== 'object') {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            'Invalid input provided: arguments must be an object'
-          );
-        }
-
-        switch (name) {
-          case 'process-phase':
-            return await this.handleProcessPhase(args);
-          case 'process-golden-pattern':
-            return await this.handleProcessGoldenPattern(args);
-          case 'process-single-method':
-            return await this.handleProcessSingleMethod(args);
-          case 'process-custom-strategy':
-            return await this.handleProcessCustomStrategy(args);
-          case 'list-thinking-methods':
-            return await this.handleListThinkingMethods();
-          case 'get-phase-recommendations':
-            return await this.handleGetPhaseRecommendations(args);
-          default:
-            throw new McpError(
-              ErrorCode.MethodNotFound,
-              `Unknown tool: ${name}`
-            );
-        }
-      } catch (error) {
-        if (error instanceof McpError) {
-          logger.error(`MCP Error: ${error.message}`, { error, name, args });
+    const result = await pipe(
+      executeToolByName(name, args as Record<string, unknown>),
+      TE.chainFirst(() => TE.fromIO(() => logger.info('Tool execution completed successfully', { name }))),
+      TE.fold(
+        (error: McpError) => {
+          // 自己修復機能により、多くのエラーは内部で解決される
+          // ここに到達するエラーは修復不可能なエラー
+          logger.error(`Tool execution failed after self-healing attempts: ${error.message}`, { 
+            error, 
+            name, 
+            args,
+            errorCode: error.code,
+            isRepairable: false
+          });
           throw error;
-        }
-        
-        logger.error(`Internal Error: ${error instanceof Error ? error.message : 'Unknown error'}`, { error, name, args });
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
-      }
-    });
-  }
-
-  /**
-   * エラーハンドラーをセットアップ
-   */
-  private setupErrorHandlers(): void {
-    this.server.onerror = (error) => {
-      logger.error('[MCP Server Error]', { error });
-      Logger.errorColored('[MCP Server Error]', 'red');
-      logger.error(error);
-    };
-
-    process.on('SIGINT', async () => {
-      logger.info('Shutting down MCP server...');
-      Logger.infoColored('Shutting down MCP server...', 'cyan');
-      await this.server.close();
-      process.exit(0);
-    });
-
-    process.on('uncaughtException', (error) => {
-      // JSONパースエラーの特別処理
-      if (error instanceof SyntaxError && error.message.includes('JSON')) {
-        logger.error('JSON Parse Error:', { error: error.message });
-        Logger.errorColored('JSON Parse Error:', 'red');
-        logger.error(error.message);
-        // JSONパースエラーの場合は再起動ではなく、エラーレスポンスを返す
-        return;
-      }
-      logger.error('Uncaught Exception', { error });
-      Logger.errorColored('Uncaught Exception:', 'red');
-      logger.error(error);
-      process.exit(1);
-    });
-
-    process.on('unhandledRejection', (reason, promise) => {
-      logger.error('Unhandled Rejection', { reason, promise });
-      Logger.errorColored('Unhandled Rejection at:', 'red');
-      logger.error(`Promise: ${promise}, Reason: ${reason}`);
-      process.exit(1);
-    });
-  }
-
-  /**
-   * 局面別思考プロセス実行ハンドラー
-   */
-  private async handleProcessPhase(args: unknown) {
-    try {
-      logger.info('Processing phase request', { args });
-      const parsed = ProcessPhaseInputSchema.parse(args);
-      logger.info('Phase input parsed successfully', { parsed });
-      
-      const context = {
-        llmProvider: globalLLMManager.getProvider(),
-        llmIntegration: globalLLMManager.getIntegration(),
-        userId: parsed.userId || undefined,
-        sessionId: `phase-${Date.now()}`,
-      };
-
-      const result = await this.orchestrator.processPhase(
-        parsed.phase,
-        parsed.input,
-        context
-      );
-
-      logger.info('Phase processing completed', { result });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-      } catch (error) {
-        logger.error('Error in handleProcessPhase', { 
-          error: error instanceof Error ? error.message : 'Unknown error',
-          args,
-          stack: error instanceof Error ? error.stack : undefined
-        });
-        throw error;
-      }
-  }
-
-  /**
-   * 黄金パターン実行ハンドラー
-   */
-  private async handleProcessGoldenPattern(args: unknown) {
-    const parsed = ProcessGoldenPatternInputSchema.parse(args);
+        },
+        (success) => TE.right(success as { [x: string]: unknown; _meta?: { [x: string]: unknown; } | undefined; })
+      )
+    )();
     
-    const context = {
-      llmProvider: globalLLMManager.getProvider(),
-      llmIntegration: globalLLMManager.getIntegration(),
-      userId: parsed.userId || undefined,
-      sessionId: `golden-${Date.now()}`,
-    };
+    return E.fold(
+      () => { throw new Error('Unexpected error'); },
+      (value) => value as { [x: string]: unknown; _meta?: { [x: string]: unknown; } | undefined; }
+    )(result as E.Either<unknown, { [x: string]: unknown; _meta?: { [x: string]: unknown; } | undefined; }>);
+  });
+}
 
-    const result = await this.orchestrator.processGoldenPattern(
-      parsed.input,
-      context
-    );
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  }
-
-  /**
-   * 単一思考法実行ハンドラー
-   */
-  private async handleProcessSingleMethod(args: unknown) {
-    try {
-      logger.info('Processing single method request', { args });
-      const parsed = ProcessSingleMethodInputSchema.parse(args);
-      logger.info('Single method input parsed successfully', { parsed });
-      
-      const context = {
-        llmProvider: globalLLMManager.getProvider(),
-        llmIntegration: globalLLMManager.getIntegration(),
-        userId: parsed.userId || undefined,
-        sessionId: `single-${Date.now()}`,
-      };
-
-      const result = await this.orchestrator.processSingleMethod(
-        parsed.method,
-        parsed.input,
-        context
-      );
-
-      logger.info('Single method processing completed', { result });
-      return {
-        content: [
+/**
+ * プロンプトハンドラーをセットアップ
+ */
+function setupPromptHandlers(server: Server): void {
+  // プロンプト一覧の提供
+  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    logger.info('ListPrompts request received');
+    const prompts = [
+      {
+        name: 'thinking-methods-guide',
+        description: '思考法の使い方と各局面での推奨思考法について説明します',
+        arguments: [
           {
-            type: 'text',
-            text: JSON.stringify(result, null, 2),
+            name: 'phase',
+            description: '特定の局面について詳しく知りたい場合（オプション）',
+            required: false,
           },
         ],
-      };
-    } catch (error) {
-      logger.error('Error in handleProcessSingleMethod', { error, args });
-      throw error;
-    }
-  }
-
-  /**
-   * カスタム戦略実行ハンドラー
-   */
-  private async handleProcessCustomStrategy(args: unknown) {
-    try {
-      logger.info('Processing custom strategy request', { args });
-      const parsed = ProcessCustomStrategyInputSchema.parse(args);
-      logger.info('Custom strategy input parsed successfully', { parsed });
-      
-      const context = {
-        llmProvider: globalLLMManager.getProvider(),
-        llmIntegration: globalLLMManager.getIntegration(),
-        userId: parsed.userId || undefined,
-        sessionId: `strategy-${Date.now()}`,
-      };
-
-      const result = await this.orchestrator.processCustomStrategy(
-        {
-          primary: parsed.primary,
-          secondary: parsed.secondary,
-          sequence: parsed.sequence
-        },
-        parsed.input,
-        context
-      );
-
-      logger.info('Custom strategy processing completed', { result });
-      return {
-        content: [
+      },
+      {
+        name: 'problem-analysis',
+        description: '問題分析のための思考プロセスをガイドします',
+        arguments: [
           {
-            type: 'text',
-            text: JSON.stringify(result, null, 2),
+            name: 'problem',
+            description: '分析したい問題の説明',
+            required: true,
           },
         ],
-      };
-    } catch (error) {
-      logger.error('Error in handleProcessCustomStrategy', { 
-        error: error instanceof Error ? error.message : 'Unknown error',
-        args,
-        stack: error instanceof Error ? error.stack : undefined
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * 思考法一覧取得ハンドラー
-   */
-  private async handleListThinkingMethods() {
-    const methods = [
-      {
-        name: 'abduction',
-        description: '驚きの事実から説明仮説を形成し、検証可能な予測を導出する',
-        applicablePhases: ['business_exploration', 'debugging', 'experimentation', 'hypothesis_breakdown'],
-        inputExample: { surprisingFact: '予想外の現象', context: 'コンテキスト情報' },
-      },
-      {
-        name: 'logical',
-        description: '論点から結論への論理的道筋を構築し、ピラミッド構造で整理する',
-        applicablePhases: ['requirement_definition', 'prioritization', 'estimation_planning', 'retrospective'],
-        inputExample: { question: '論点・問い', information: ['既知の情報'], constraints: ['制約条件'] },
-      },
-      {
-        name: 'critical',
-        description: '前提・論点・根拠を体系的に疑い、論理の矛盾や飛躍を特定・補強する',
-        applicablePhases: ['refactoring', 'code_review', 'requirement_definition', 'value_hypothesis'],
-        inputExample: { claim: '主張・結論', evidence: ['根拠'], context: 'コンテキスト' },
-      },
-      {
-        name: 'mece',
-        description: '項目を漏れなく重複なく分類し、構造化された全体像を構築する',
-        applicablePhases: ['prioritization', 'refactoring', 'code_review', 'test_design'],
-        inputExample: { purpose: '分類の目的', items: ['分類対象項目'], proposedCriteria: '分類基準' },
-      },
-      {
-        name: 'deductive',
-        description: '一般的な原則・理論から具体的な結論を論理的に導出する',
-        applicablePhases: ['architecture_design', 'implementation', 'debugging', 'test_design'],
-        inputExample: { majorPremise: '大前提', minorPremise: '小前提', domain: '適用領域' },
-      },
-      {
-        name: 'inductive',
-        description: '個別事例から共通パターンを発見し一般論を構築する',
-        applicablePhases: ['value_hypothesis', 'experimentation', 'debugging'],
-        inputExample: { observations: ['観測サンプル'], context: 'コンテキスト' },
-      },
-      {
-        name: 'pac',
-        description: '仮説を前提・仮定・結論に分解し、仮定と前提の妥当性を検証する',
-        applicablePhases: ['hypothesis_breakdown', 'retrospective'],
-        inputExample: { claim: '主張・結論', context: 'コンテキスト' },
-      },
-      {
-        name: 'meta',
-        description: '思考プロセス自体を対象化し、より高次の視点から評価・改善する',
-        applicablePhases: ['retrospective', 'estimation_planning', 'decision_making'],
-        inputExample: { currentThinking: '現在の思考内容', objective: '目的・目標' },
-      },
-      {
-        name: 'debate',
-        description: '論題に対する賛成・反対の論点を体系的に検討し意思決定を支援する',
-        applicablePhases: ['decision_making', 'architecture_design'],
-        inputExample: { proposition: '論題（〇〇すべき形式）', context: '背景情報' },
       },
     ];
+    logger.info('Returning prompts list', { promptsCount: prompts.length });
+    return { prompts };
+  });
+}
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(methods, null, 2),
-        },
-      ],
-    };
-  }
+/**
+ * エラーハンドラーをセットアップ
+ */
+function setupErrorHandlers(server: Server): void {
+  server.onerror = (error) => {
+    logger.error('[MCP Server Error]', { error });
+  };
 
-  /**
-   * 局面別推奨思考法取得ハンドラー
-   */
-  private async handleGetPhaseRecommendations(args: unknown) {
-    const { phase } = z.object({ phase: DevelopmentPhase }).parse(args);
-    
-    const recommendations = {
-      business_exploration: { primary: 'abduction', secondary: ['inductive', 'deductive', 'meta'] },
-      requirement_definition: { primary: 'logical', secondary: ['mece', 'critical'] },
-      value_hypothesis: { primary: 'inductive', secondary: ['critical'] },
-      architecture_design: { primary: 'deductive', secondary: ['debate'] },
-      prioritization: { primary: 'mece', secondary: ['logical'] },
-      estimation_planning: { primary: 'logical', secondary: ['meta'] },
-      implementation: { primary: 'deductive', secondary: ['critical'] },
-      debugging: { primary: 'abduction', secondary: ['deductive', 'inductive'] },
-      refactoring: { primary: 'critical', secondary: ['mece', 'logical'] },
-      code_review: { primary: 'critical', secondary: ['deductive', 'mece'] },
-      test_design: { primary: 'deductive', secondary: ['mece', 'inductive'] },
-      experimentation: { primary: 'inductive', secondary: ['critical'] },
-      decision_making: { primary: 'debate', secondary: ['meta'] },
-      retrospective: { primary: 'meta', secondary: ['logical', 'pac'] },
-      hypothesis_breakdown: { primary: 'pac', secondary: ['critical'] },
-    };
+  process.on('SIGINT', async () => {
+    logger.info('Shutting down MCP server...');
+    await server.close();
+    process.exit(0);
+  });
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(recommendations[phase], null, 2),
-        },
-      ],
-    };
-  }
-
-  /**
-   * バージョン情報取得
-   */
-  private getVersion(): string {
-    try {
-      const packageJson = JSON.parse(readFileSync('package.json', 'utf-8'));
-      return packageJson.version || '0.1.7';
-    } catch {
-      return '0.1.7';
+  process.on('uncaughtException', (error) => {
+    // JSONパースエラーの特別処理
+    if (error instanceof SyntaxError && error.message.includes('JSON')) {
+      logger.error('JSON Parse Error:', { error: error.message });
+      // JSONパースエラーの場合は再起動ではなく、エラーレスポンスを返す
+      return;
     }
-  }
+    logger.error('Uncaught Exception', { error });
+    process.exit(1);
+  });
 
-  /**
-   * サーバーを開始
-   */
-  async start(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    Logger.infoColored(`Thinking Methods MCP Server running on stdio, port: ${process.env.PORT || 3000}`, 'cyan');
-  }
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Rejection', { reason, promise });
+    process.exit(1);
+  });
+}
+
+/**
+ * サーバーを開始
+ */
+async function startServer(server: Server): Promise<void> {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  logger.info(`Thinking Methods MCP Server running on stdio, port: ${process.env.PORT || SERVER_CONFIG.DEFAULT_PORT}`);
+  logger.info(LOG_MESSAGES.SERVER_STARTED, { 
+    toolsCount: SERVER_CONFIG.TOOLS_COUNT,
+    serverName: SERVER_CONFIG.NAME,
+    version: getVersion()
+  });
 }
 
 // メイン実行
 async function main() {
-  const server = new ThinkingMethodsMCPServer();
-  await server.start();
+  const server = createThinkingMethodsMCPServer();
+  await startServer(server);
 }
 
 // スクリプトとして実行された場合のみmainを実行
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((error) => {
-    Logger.errorColored('Failed to start server:', 'red');
-    logger.error(error);
+    logger.error('Failed to start server:', { error });
     process.exit(1);
   });
 }
