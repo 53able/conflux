@@ -86,7 +86,13 @@ export const extractSchemaRequirements = (schema: Schema): string => {
         if (isZodSchema(schema)) {
           const typeName = getZodSchemaTypeName(schema);
           const exampleJson = generateSchemaExample(schema);
-          return `スキーマタイプ: ${typeName}\n\n出力例（この形式に厳密に従ってください）:\n${exampleJson}\n\n詳細な構造要件を満たす必要があります。`;
+          return `
+スキーマタイプ: ${typeName}
+
+出力例（この形式に厳密に従ってください）:
+${exampleJson}
+
+詳細な構造要件を満たす必要があります。`;
         }
         return '指定されたスキーマ構造に従ってください。';
       },
@@ -349,7 +355,7 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           reasoning: "評価の理由",
           status: "completed"
         };
-      } else if (shape && 'premise' in shape && 'assumption' in shape) {
+      } else if (shape && 'premise' in shape && 'assumption' in shape && 'assumptions_validity' in shape && 'premise_validity' in shape) {
         // PACOutputSchema
         return {
           premise: "前提",
