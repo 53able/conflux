@@ -30,7 +30,12 @@
     "lint": "eslint src/**/*.ts",
     "type-check": "tsc --noEmit",
     "prepack": "pnpm run build",
-    "clean": "rm -rf dist node_modules/.cache"
+    "clean": "rm -rf dist node_modules/.cache",
+    "docker:build": "docker build -t conflux-mcp .",
+    "docker:run": "docker run --rm -it conflux-mcp",
+    "docker:compose": "docker-compose up --build",
+    "docker:compose:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f mcp-server"
   },
   "packageManager": "pnpm@9.0.0",
   "keywords": [
@@ -56,9 +61,11 @@
     "ai": "^5.0.0",
     "commander": "^14.0.0",
     "dotenv": "^17.2.2",
+    "fp-ts": "^2.16.11",
     "ora": "^8.0.0",
     "winston": "^3.17.0",
-    "zod": "^4.1.5"
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@types/node": "^22.18.1",

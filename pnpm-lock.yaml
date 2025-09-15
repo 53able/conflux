@@ -10,13 +10,13 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^2.0.15
-        version: 2.0.15(zod@4.1.5)
+        version: 2.0.15(zod@3.25.76)
       '@ai-sdk/google':
         specifier: ^2.0.13
-        version: 2.0.13(zod@4.1.5)
+        version: 2.0.13(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^2.0.27
-        version: 2.0.27(zod@4.1.5)
+        version: 2.0.27(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: ^2.0.0
         version: 2.0.0
@@ -25,16 +25,16 @@ importers:
         version: 1.17.5
       ai:
         specifier: ^5.0.0
-        version: 5.0.39(zod@4.1.5)
-      chalk:
-        specifier: ^5.3.0
-        version: 5.6.2
+        version: 5.0.39(zod@3.25.76)
       commander:
         specifier: ^14.0.0
         version: 14.0.0
       dotenv:
         specifier: ^17.2.2
         version: 17.2.2
+      fp-ts:
+        specifier: ^2.16.11
+        version: 2.16.11
       ora:
         specifier: ^8.0.0
         version: 8.2.0
@@ -42,8 +42,11 @@ importers:
         specifier: ^3.17.0
         version: 3.17.0
       zod:
-        specifier: ^4.1.5
-        version: 4.1.5
+        specifier: ^3.25.76
+        version: 3.25.76
+      zod-to-json-schema:
+        specifier: ^3.24.6
+        version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@types/node':
         specifier: ^22.18.1
@@ -1062,6 +1065,9 @@ packages:
     resolution: {integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==}
     engines: {node: '>= 0.6'}
 
+  fp-ts@2.16.11:
+    resolution: {integrity: sha512-LaI+KaX2NFkfn1ZGHoKCmcfv7yrZsC3b8NtWsTVQeHkq4F27vI5igUuO53sxqDEa2gNQMHFPmpojDw/1zmUK7w==}
+
   fresh@2.0.0:
     resolution: {integrity: sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==}
     engines: {node: '>= 0.8'}
@@ -1730,41 +1736,38 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
-  zod@4.1.5:
-    resolution: {integrity: sha512-rcUUZqlLJgBC33IT3PNMgsCq6TzLQEG/Ei/KTCU0PedSWRMAXoOUN+4t/0H+Q8bdnLPdqUYnvboJT0bn/229qg==}
-
 snapshots:
 
-  '@ai-sdk/anthropic@2.0.15(zod@4.1.5)':
+  '@ai-sdk/anthropic@2.0.15(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.8(zod@4.1.5)
-      zod: 4.1.5
+      '@ai-sdk/provider-utils': 3.0.8(zod@3.25.76)
+      zod: 3.25.76
 
-  '@ai-sdk/gateway@1.0.20(zod@4.1.5)':
+  '@ai-sdk/gateway@1.0.20(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.8(zod@4.1.5)
-      zod: 4.1.5
+      '@ai-sdk/provider-utils': 3.0.8(zod@3.25.76)
+      zod: 3.25.76
 
-  '@ai-sdk/google@2.0.13(zod@4.1.5)':
+  '@ai-sdk/google@2.0.13(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.8(zod@4.1.5)
-      zod: 4.1.5
+      '@ai-sdk/provider-utils': 3.0.8(zod@3.25.76)
+      zod: 3.25.76
 
-  '@ai-sdk/openai@2.0.27(zod@4.1.5)':
+  '@ai-sdk/openai@2.0.27(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.8(zod@4.1.5)
-      zod: 4.1.5
+      '@ai-sdk/provider-utils': 3.0.8(zod@3.25.76)
+      zod: 3.25.76
 
-  '@ai-sdk/provider-utils@3.0.8(zod@4.1.5)':
+  '@ai-sdk/provider-utils@3.0.8(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@standard-schema/spec': 1.0.0
       eventsource-parser: 3.0.6
-      zod: 4.1.5
+      zod: 3.25.76
 
   '@ai-sdk/provider@2.0.0':
     dependencies:
@@ -2244,13 +2247,13 @@ snapshots:
 
   acorn@8.15.0: {}
 
-  ai@5.0.39(zod@4.1.5):
+  ai@5.0.39(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 1.0.20(zod@4.1.5)
+      '@ai-sdk/gateway': 1.0.20(zod@3.25.76)
       '@ai-sdk/provider': 2.0.0
-      '@ai-sdk/provider-utils': 3.0.8(zod@4.1.5)
+      '@ai-sdk/provider-utils': 3.0.8(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
-      zod: 4.1.5
+      zod: 3.25.76
 
   ajv@6.12.6:
     dependencies:
@@ -2661,6 +2664,8 @@ snapshots:
   fn.name@1.1.0: {}
 
   forwarded@0.2.0: {}
+
+  fp-ts@2.16.11: {}
 
   fresh@2.0.0: {}
 
@@ -3308,5 +3313,3 @@ snapshots:
       zod: 3.25.76
 
   zod@3.25.76: {}
-
-  zod@4.1.5: {}
