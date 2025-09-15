@@ -191,13 +191,16 @@ const extractSchemaInstructions = (schema: ZodSchema): string => {
 const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
   try {
     // スキーマの内部構造を調べて特定のスキーマを識別
-    const schemaWithDef = schema as { _def?: { type?: string; shape?: Record<string, unknown> } };
+    const schemaWithDef = schema as { _def?: { typeName?: string; shape?: (() => Record<string, unknown>) | Record<string, unknown> } };
     
-    if (schemaWithDef._def?.type === 'object') {
+    if (schemaWithDef._def?.typeName === 'ZodObject') {
       const shape = schemaWithDef._def.shape;
       
       // 特定のスキーマに基づいた例を生成
-      if (shape && 'generalizations' in shape && 'sampleSize' in shape) {
+      if (shape && typeof shape === 'function') {
+        const shapeObj = shape();
+        
+        if ('generalizations' in shapeObj && 'sampleSize' in shapeObj) {
         // InductiveOutputSchema
         return {
           generalizations: [
@@ -219,7 +222,7 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           reasoning: "推論プロセスの説明",
           status: "completed"
         };
-      } else if (shape && 'conclusion' in shape && 'validityCheck' in shape) {
+        } else if ('conclusion' in shapeObj && 'validityCheck' in shapeObj) {
         // DeductiveOutputSchema
         return {
           conclusion: "導出された結論",
@@ -233,7 +236,7 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           reasoning: "推論の理由",
           status: "completed"
         };
-      } else if (shape && 'hypotheses' in shape && 'recommendedNext' in shape) {
+        } else if ('hypotheses' in shapeObj && 'recommendedNext' in shapeObj) {
         // AbductionOutputSchema
         return {
           hypotheses: [
@@ -248,7 +251,7 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           reasoning: "仮説選択の理由",
           status: "completed"
         };
-      } else if (shape && 'questioningResults' in shape && 'strengthsWeaknesses' in shape) {
+        } else if ('questioningResults' in shapeObj && 'strengthsWeaknesses' in shapeObj) {
         // CriticalOutputSchema
         return {
           questioningResults: {
@@ -267,7 +270,7 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           reasoning: "評価の理由",
           status: "completed"
         };
-      } else if (shape && 'proposition' in shape && 'proArguments' in shape) {
+        } else if ('proposition' in shapeObj && 'proArguments' in shapeObj) {
         // DebateOutputSchema
         return {
           proposition: "論題",
@@ -295,7 +298,7 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           reasoning: "結論の理由",
           status: "completed"
         };
-      } else if (shape && 'reasoning' in shape && 'pyramid' in shape) {
+        } else if ('reasoning' in shapeObj && 'pyramid' in shapeObj) {
         // LogicalOutputSchema
         return {
           conclusion: "導出された結論",
@@ -318,7 +321,7 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           confidence: 0.8,
           status: "completed"
         };
-      } else if (shape && 'categories' in shape && 'gaps' in shape) {
+        } else if ('categories' in shapeObj && 'gaps' in shapeObj) {
         // MECEOutputSchema
         return {
           criteria: "使用した分類基準",
@@ -335,7 +338,7 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           reasoning: "分類の理由",
           status: "completed"
         };
-      } else if (shape && 'processEvaluation' in shape && 'recommendations' in shape) {
+        } else if ('processEvaluation' in shapeObj && 'recommendations' in shapeObj) {
         // MetaOutputSchema
         return {
           processEvaluation: {
@@ -355,7 +358,7 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           reasoning: "評価の理由",
           status: "completed"
         };
-      } else if (shape && 'premise' in shape && 'assumption' in shape && 'assumptions_validity' in shape && 'premise_validity' in shape) {
+        } else if ('premise' in shapeObj && 'assumption' in shapeObj && 'assumptions_validity' in shapeObj && 'premise_validity' in shapeObj) {
         // PACOutputSchema
         return {
           premise: "前提",
@@ -375,23 +378,31 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
           reasoning: "分解と検証の理由",
           status: "completed"
         };
+        } else {
+          // 汎用的なオブジェクト例
+          return {
+            field1: '例文字列',
+            field2: 0.5,
+            field3: true
+          };
+        }
       } else {
-        // 汎用的なオブジェクト例
+        // 汎用的なオブジェクト例（shapeが関数でない場合）
         return {
           field1: '例文字列',
           field2: 0.5,
           field3: true
         };
       }
-    } else if (schemaWithDef._def?.type === 'string') {
+    } else if (schemaWithDef._def?.typeName === 'ZodString') {
       return '例文字列';
-    } else if (schemaWithDef._def?.type === 'number') {
+    } else if (schemaWithDef._def?.typeName === 'ZodNumber') {
       return 0.5;
-    } else if (schemaWithDef._def?.type === 'boolean') {
+    } else if (schemaWithDef._def?.typeName === 'ZodBoolean') {
       return true;
-    } else if (schemaWithDef._def?.type === 'array') {
+    } else if (schemaWithDef._def?.typeName === 'ZodArray') {
       return ['例1', '例2'];
-    } else if (schemaWithDef._def?.type === 'enum') {
+    } else if (schemaWithDef._def?.typeName === 'ZodEnum') {
       return 'valid';
     } else {
       return '例の値';
@@ -400,3 +411,6 @@ const generateExampleFromZodSchema = (schema: ZodSchema): unknown => {
     return '例の値';
   }
 };
+
+// エクスポート
+export { generateExampleFromZodSchema };

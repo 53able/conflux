@@ -154,11 +154,11 @@ export const executeFunctionalAgent = <Input, Output>(
 
           return {
             method: agent.capability.methodType,
-            input: input as unknown,
-            output: output as unknown,
+            input: input,
+            output: output,
             confidence,
             reasoning,
-            status: 'success' as ThinkingProcessStatus,
+            status: 'completed',
             timestamp: new Date().toISOString(),
             metadata: {
               agentConfig: agent.config,
