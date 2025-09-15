@@ -1,167 +1,152 @@
-import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
+import { 
+  type AgentCapability,
+  type FunctionalAgent,
+  type AgentConfig,
+  type PromptGenerator,
+  type ConfidenceCalculator,
+  type ReasoningGenerator,
+  type NextStepRecommender
+} from '../core/agent-base.js';
 import { 
   ThinkingMethodType, 
-  DebateInput, 
-  DebateOutput,
-  DevelopmentPhase, 
-  ThinkingResult
-} from '../schemas/thinking.js';
+  DevelopmentPhase
+} from '../schemas/index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { type DebateInput, type DebateOutput, DebateInputSchema, DebateOutputSchema } from '../schemas/index.js';
 
-export class DebateThinkingAgent extends BaseThinkingAgent {
-  readonly capability: AgentCapability = {
-    methodType: 'debate' as ThinkingMethodType,
-    description: '論題に対する賛成・反対の論点を体系的に検討し意思決定を支援する',
-    applicablePhases: [
-      'decision_making',
-      'architecture_design'
-    ] as DevelopmentPhase[],
-    requiredInputSchema: DebateInput,
-    outputSchema: DebateOutput,
-    combinationSynergies: ['critical', 'meta', 'logical'] as ThinkingMethodType[],
-  };
+/**
+ * ディベート思考エージェント（関数型スタイル）
+ * 
+ * 機能:
+ * 1. 複数の視点から論点を検討する
+ * 2. 対立する意見を整理する
+ * 3. バランスの取れた結論を導く
+ * 
+ * 適用場面:
+ * - 意思決定
+ * - 設計判断
+ * - 問題解決
+ */
 
-  protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const promptTemplate = new DebatePromptTemplate(this);
-    const { system, user } = promptTemplate.generatePrompts(input);
+// ============================================================================
+// 関数型スタイルのディベート思考エージェント
+// ============================================================================
 
-    // AI SDKのgenerateObjectを使用してスキーマ保証
-    const result = await this.callLLMWithStructuredOutput(
-      DebateOutput,
-      system,
-      user,
-      context,
-      {
-        temperature: 0.5, // 多角的な論点発見のため
-        maxRetries: 3,
-        enableAutoRecovery: true,
-        schemaName: 'DebateOutput',
-        schemaDescription: 'ディベート思考の分析結果を表す構造化データ',
-        mode: 'json',
-      }
-    );
 
-    return result as Record<string, unknown>;
-  }
+// エージェント能力定義
+const debateCapability: AgentCapability = {
+  methodType: 'debate' as ThinkingMethodType,
+  description: '複数の視点から論点を検討しバランスの取れた結論を導く',
+  applicablePhases: [
+    'decision_making',
+    'architecture_design',
+    'problem_solving'
+  ] as DevelopmentPhase[],
+  requiredInputSchema: DebateInputSchema,
+  outputSchema: DebateOutputSchema,
+  combinationSynergies: ['critical', 'meta', 'logical'] as ThinkingMethodType[],
+};
 
-  /**
-   * ディベート思考特有の入力正規化
-   */
-  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
-    const normalized = { ...input };
+// エージェント設定
+const debateConfig: AgentConfig = {
+  temperature: 0.6,
+  maxRetries: 3,
+  enableAutoRecovery: true,
+  schemaName: 'DebateOutput',
+  schemaDescription: 'ディベート思考の分析結果を表す構造化データ',
+  mode: 'json'
+};
 
-    // 必須フィールドの正規化
-    if (!normalized.proposition) {
-      // propositionが不足している場合、contentやtextから生成
-      const content = normalized.content || normalized.text || normalized.message || '';
-      normalized.proposition = content;
-    }
+// プロンプト生成関数
+const generateDebatePrompts: PromptGenerator<DebateInput> = (input, capability) => {
+  // スキーマから動的にJSON例と注意事項を生成
+  const schemaExample = generateSchemaExample(capability.outputSchema);
+  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
 
-    // contextの正規化
-    if (!normalized.context) {
-      normalized.context = '';
-    }
-
-    return normalized;
-  }
-
-  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
-    const debateOutput = output as DebateOutput;
-    
-    // 賛成・反対論点のバランス
-    const proCount = debateOutput.proArguments.length;
-    const conCount = debateOutput.conArguments.length;
-    const balanceScore = Math.min(proCount, conCount) * 0.1;
-    
-    // 論点の平均強度
-    const avgProStrength = debateOutput.proArguments.reduce((sum, arg) => sum + arg.strength, 0) / proCount || 0;
-    const avgConStrength = debateOutput.conArguments.reduce((sum, arg) => sum + arg.strength, 0) / conCount || 0;
-    const strengthScore = (avgProStrength + avgConStrength) / 2;
-    
-    // 争点の特定
-    const disputeScore = Math.min(debateOutput.keyDisputes.length * 0.05, 0.15);
-    
-    return Math.min(balanceScore + strengthScore * 0.5 + disputeScore, 1.0);
-  }
-
-  protected override generateReasoningExplanation(
-    input: unknown, 
-    output: Record<string, unknown>, 
-    _context: AgentContext
-  ): string {
-    const typedInput = input as { proposition: string };
-    const typedOutput = output as DebateOutput;
-    
-    return `「${typedInput.proposition}」についてディベート思考を実施。賛成論点${typedOutput.proArguments.length}個、反対論点${typedOutput.conArguments.length}個を検討し、${typedOutput.keyDisputes.length}個の主要争点を特定しました。最終判断: ${typedOutput.recommendation.decision}（${typedOutput.recommendation.reasoning}）`;
-  }
-
-  /**
-   * ディベート思考後の次ステップ推奨
-   */
-  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
-    const baseRecommendations = super.getNextRecommendations(result, phase);
-    
-    // ディベート思考後は決定の実行が重要
-    const debateSpecific: ThinkingMethodType[] = ['meta'];
-    
-    // 論点の検証にはクリティカル思考も有効
-    if (phase === 'architecture_design') {
-      debateSpecific.push('critical');
-    }
-    
-    // 意思決定の実行には論理的思考も重要
-    if (phase === 'decision_making') {
-      debateSpecific.push('logical');
-    }
-
-    return [...new Set([...debateSpecific, ...baseRecommendations])];
-  }
-}
-
-class DebatePromptTemplate extends LLMPromptTemplate {
-  constructor(private agent: DebateThinkingAgent) {
-    super();
-  }
-
-  protected getSystemPrompt(): string {
-    const schemaExample = this.agent.generateSchemaExample(DebateOutput);
-    
-    return `あなたはディベート思考の専門家です。
+  const systemPrompt = `あなたはディベート思考の専門家です。複数の視点から論点を検討し、バランスの取れた結論を導いてください。
 
 ディベート思考の手順:
-1. 論題設定（「〇〇すべき」形式）
-2. 賛成論点の体系的列挙
-3. 反対論点の体系的列挙  
-4. 争点の明確化
-5. 中立的立場での最終判断
+1. 論点を明確にする
+2. 複数の立場を特定する
+3. 各立場の論拠を整理する
+4. 各立場の強みと弱みを分析する
+5. 統合的な結論を導く
 
-重要な原則:
-- 両論併記での公平な検討
-- 根拠の強度と妥当性の評価
-- 見えていなかった争点の発見
-- 感情的にならず論理的に
+重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-出力形式（JSON）:
 ${schemaExample}
 
-必ず上記のJSON形式で出力してください。`;
+注意事項:
+${schemaInstructions}
+
+ディベート思考の本質である「多角的視点」を重視し、公平で建設的な分析を行ってください。`;
+
+  const userPrompt = `以下のトピックについて、ディベート思考により多角的に検討してください。
+
+トピック:
+${input.topic}
+
+${(input.positions && input.positions.length > 0) ? `既存の立場:\n${input.positions.map((p, i) => `${i + 1}. ${p}`).join('\n')}` : ''}
+
+${input.context ? `コンテキスト: ${input.context}` : ''}
+${input.domain ? `ドメイン: ${input.domain}` : ''}
+
+上記のトピックについて複数の立場を検討し、各立場の論拠・強み・弱みを分析して、統合的な結論を導いてください。`;
+
+  return E.right({ system: systemPrompt, user: userPrompt });
+};
+
+// 信頼度計算関数
+const calculateDebateConfidence: ConfidenceCalculator<DebateOutput> = (output, _context) => {
+  // ディベート思考の信頼度は立場の多様性と分析の深さに基づく
+  const proArgumentsCount = output.proArguments.length;
+  const conArgumentsCount = output.conArguments.length;
+  const positionDiversity = proArgumentsCount + conArgumentsCount;
+  
+  const analysisDepth = (
+    output.proArguments.reduce((sum, arg) => sum + arg.evidence.length, 0) +
+    output.conArguments.reduce((sum, arg) => sum + arg.evidence.length, 0)
+  ) / Math.max(positionDiversity, 1);
+  
+  const baseConfidence = output.confidence;
+  const diversityBonus = Math.min(positionDiversity * 0.1, 0.3);
+  const depthBonus = Math.min(analysisDepth * 0.05, 0.2);
+  
+  // 主要な争点の明確さによるボーナス
+  const disputesBonus = Math.min(output.keyDisputes.length * 0.05, 0.1);
+  
+  return Math.min(baseConfidence + diversityBonus + depthBonus + disputesBonus, 1.0);
+};
+
+// 推論説明生成関数
+const generateDebateReasoning: ReasoningGenerator<DebateInput, DebateOutput> = (input, output, _context) => {
+  return `「${input.topic}」について、${output.proArguments.length}個の賛成論点と${output.conArguments.length}個の反対論点を検討し、${output.keyDisputes.length}個の主要な争点を特定しました。最終判断: ${output.recommendation.decision}（理由: ${output.recommendation.reasoning}）。多角的視点によるバランスの取れた結論を導出しました（信頼度: ${(output.confidence * 100).toFixed(1)}%）`;
+};
+
+// 次ステップ推奨関数
+const recommendDebateNextSteps: NextStepRecommender = (_result, phase) => {
+  const baseRecommendations: ThinkingMethodType[] = ['critical', 'meta'];
+  
+  // 意思決定では批判的思考も有効
+  if (phase === 'decision_making') {
+    baseRecommendations.push('critical');
+  }
+  
+  // 設計判断では論理的思考も重要
+  if (phase === 'architecture_design') {
+    baseRecommendations.push('logical');
   }
 
-  protected getUserPrompt(input: unknown): string {
-    const { proposition, context } = input as { proposition: string; context?: string };
+  return baseRecommendations;
+};
 
-    return `以下の論題についてディベート思考で分析してください。
-
-## 論題
-${proposition}
-
-${context ? `## 背景情報\n${context}\n` : ''}
-
-## 求めるディベート分析
-1. **賛成論点**: 根拠・強度付きで列挙
-2. **反対論点**: 根拠・強度付きで列挙
-3. **主要争点**: 議論の核心となる論点
-4. **最終判断**: 支持/反対/修正案の決定と理由
-
-勝ち負けではなく、最良の意思決定のための建設的な論点整理を行ってください。`;
-  }
-}
+// 関数型エージェントの定義
+export const debateAgent: FunctionalAgent<DebateInput, DebateOutput> = {
+  capability: debateCapability,
+  config: debateConfig,
+  generatePrompts: generateDebatePrompts,
+  calculateConfidence: calculateDebateConfidence,
+  generateReasoning: generateDebateReasoning,
+  recommendNextSteps: recommendDebateNextSteps,
+};

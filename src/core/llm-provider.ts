@@ -1,15 +1,17 @@
-import { openai, createOpenAI } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { google } from '@ai-sdk/google';
-import { generateText, generateObject } from 'ai';
-import { z } from 'zod';
+import { createOpenAI, openai } from '@ai-sdk/openai';
+import { generateObject, generateText } from 'ai';
 import 'dotenv/config';
-import { Logger } from './logger.js';
+import { LLM_PROVIDER_CONFIGS, SUPPORTED_PROVIDERS, type LLMProviderType } from './constants.js';
+import { getLogger } from './index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import * as O from 'fp-ts/lib/Option.js';
+import { pipe } from 'fp-ts/lib/function.js';
+import { generateStructuredOutput, healthCheck } from './llm-integration.js';
+import type { GenerationOptions, Schema } from './types.js';
 
-/**
- * サポートするLLMプロバイダーの種類
- */
-export type LLMProviderType = 'openai' | 'anthropic' | 'google' | 'openai-compatible' | 'mock';
+const logger = getLogger();
 
 /**
  * LLMプロバイダーの型定義（AI SDKの実際のプロバイダー型）
@@ -31,28 +33,6 @@ export interface MockProvider {
 }
 
 /**
- * Zodスキーマの型定義（Zod公式推奨）
- */
-export type ZodSchema = z.ZodType<unknown>;
-
-/**
- * スキーマの型定義（ZodスキーマまたはJSONスキーマ）
- */
-export type Schema = ZodSchema | Record<string, unknown>;
-
-/**
- * 生成オプションの型定義
- */
-export interface GenerationOptions {
-  temperature?: number;
-  maxRetries?: number;
-  enableAutoRecovery?: boolean;
-  mode?: 'auto' | 'json' | 'tool';
-  schemaName?: string;
-  schemaDescription?: string;
-}
-
-/**
  * LLMプロバイダー設定
  */
 export interface LLMProviderConfig {
@@ -68,568 +48,323 @@ export interface LLMProviderConfig {
 }
 
 /**
- * デフォルトのLLMプロバイダー設定
+ * LLMプロバイダーマネージャーの状態型定義
  */
-export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMProviderConfig>> = {
-  openai: {
-    model: process.env.OPENAI_MODEL || 'gpt-5-nano',
-    defaultParams: {
-      temperature: 0.3,
-      maxTokens: 2000,
-    },
-  },
-  anthropic: {
-    model: process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-latest',
-    defaultParams: {
-      temperature: 0.3,
-      maxTokens: 2000,
-    },
-  },
-  google: {
-    model: process.env.GOOGLE_MODEL || 'gemini-2.5-flash',
-    defaultParams: {
-      temperature: 0.3,
-      maxTokens: 2000,
-    },
-  },
-  'openai-compatible': {
-    model: 'gpt-3.5-turbo',
-    defaultParams: {
-      temperature: 0.3,
-      maxTokens: 2000,
-    },
-  },
-  mock: {
-    model: 'mock-model',
-    defaultParams: {
-      temperature: 0.3,
-      maxTokens: 2000,
-    },
-  },
+type LLMProviderManagerState = {
+  providers: Map<string, LLMProvider>;
+  configs: Map<string, LLMProviderConfig>;
+  defaultProvider: string | null;
 };
 
 /**
- * LLMプロバイダーマネージャー
- * 
- * 機能:
- * 1. 複数のLLMプロバイダーの統一管理
- * 2. プロバイダー固有の設定管理
- * 3. フォールバック機能
- * 4. レート制限対応
- * 5. エラーハンドリング
+ * LLMプロバイダーマネージャーの状態管理
  */
-export class LLMProviderManager {
-  private providers: Map<string, LLMProvider> = new Map();
-  private configs: Map<string, LLMProviderConfig> = new Map();
-  private defaultProvider?: string;
-
-  /**
-   * LLMプロバイダーを登録
-   */
-  registerProvider(name: string, config: LLMProviderConfig): void {
-    const fullConfig = { ...DEFAULT_CONFIGS[config.type], ...config };
-    this.configs.set(name, fullConfig);
-
-    const provider = (() => {
-      switch (config.type) {
-        case 'openai':
-          return this.createOpenAIProvider(fullConfig);
-        case 'anthropic':
-          return this.createAnthropicProvider(fullConfig);
-        case 'google':
-          return this.createGoogleProvider(fullConfig);
-        case 'openai-compatible':
-          return this.createOpenAICompatibleProvider(fullConfig);
-        case 'mock':
-          return this.createMockProvider(fullConfig);
-        default:
-          throw new Error(`Unsupported provider type: ${config.type}`);
-      }
-    })();
-
-    this.providers.set(name, provider);
-
-    // 最初に登録されたプロバイダーをデフォルトに設定
-    if (!this.defaultProvider) {
-      this.defaultProvider = name;
-    }
-  }
-
-  /**
-   * プロバイダーを取得
-   */
-  getProvider(name?: string): LLMProvider {
-    const providerName = name || this.defaultProvider;
-    if (!providerName) {
-      throw new Error('No LLM provider available');
-    }
-
-    const provider = this.providers.get(providerName);
-    if (!provider) {
-      throw new Error(`LLM provider not found: ${providerName}`);
-    }
-
-    return provider;
-  }
-
-  /**
-   * LLMIntegrationを取得
-   */
-  getIntegration(): LLMIntegration {
-    return new LLMIntegration(this);
-  }
-
-  /**
-   * デフォルトプロバイダーを設定
-   */
-  setDefaultProvider(name: string): void {
-    if (!this.providers.has(name)) {
-      throw new Error(`Provider not registered: ${name}`);
-    }
-    this.defaultProvider = name;
-  }
-
-  /**
-   * 登録済みプロバイダー一覧を取得
-   */
-  listProviders(): string[] {
-    return Array.from(this.providers.keys());
-  }
-
-  /**
-   * プロバイダー設定を取得
-   */
-  getConfig(name: string): LLMProviderConfig | undefined {
-    return this.configs.get(name);
-  }
-
-  /**
-   * OpenAIプロバイダーを作成
-   */
-  private createOpenAIProvider(config: LLMProviderConfig): LLMProvider {
-    if (!config.apiKey && !process.env.OPENAI_API_KEY) {
-      throw new Error('OpenAI API key is required');
-    }
-    
-    // AI SDK v5の公式パターンに従う
-    const defaultConfig = DEFAULT_CONFIGS.openai;
-    const modelName = config.model || process.env.OPENAI_MODEL || defaultConfig.model!;
-    return openai(modelName);
-  }
-
-  /**
-   * Anthropicプロバイダーを作成
-   */
-  private createAnthropicProvider(config: LLMProviderConfig): LLMProvider {
-    if (!config.apiKey && !process.env.ANTHROPIC_API_KEY) {
-      throw new Error('Anthropic API key is required');
-    }
-    
-    // AI SDK v5の公式パターンに従う
-    const defaultConfig = DEFAULT_CONFIGS.anthropic;
-    const modelName = config.model || process.env.ANTHROPIC_MODEL || defaultConfig.model!;
-    return anthropic(modelName);
-  }
-
-  /**
-   * Googleプロバイダーを作成
-   */
-  private createGoogleProvider(config: LLMProviderConfig): LLMProvider {
-    if (!config.apiKey && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      throw new Error('Google Generative AI API key is required');
-    }
-    
-    // AI SDK v5の公式パターンに従う
-    const defaultConfig = DEFAULT_CONFIGS.google;
-    const modelName = config.model || process.env.GOOGLE_MODEL || defaultConfig.model!;
-    return google(modelName);
-  }
-
-  /**
-   * OpenAI互換プロバイダーを作成
-   */
-  private createOpenAICompatibleProvider(config: LLMProviderConfig): LLMProvider {
-    if (!config.baseURL) {
-      throw new Error('Base URL is required for OpenAI-compatible provider');
-    }
-
-    const provider = createOpenAI({
-      apiKey: config.apiKey || 'dummy-key',
-      baseURL: config.baseURL,
-    });
-
-    return provider(config.model || 'gpt-3.5-turbo');
-  }
-
-  /**
-   * モックプロバイダーを作成（テスト用）
-   */
-  private createMockProvider(config: LLMProviderConfig): MockProvider {
-    // モック実装 - 実際のLLMの代わりにダミーレスポンスを返す
-    // モックプロバイダーの実装は実際のLLMを使用しない開発・テスト用
-    return {
-      provider: 'mock',
-      modelId: config.model || 'mock-model',
-      settings: {},
-    };
-  }
-}
+const managerState: LLMProviderManagerState = {
+  providers: new Map(),
+  configs: new Map(),
+  defaultProvider: null
+};
 
 /**
- * LLM統合ヘルパークラス
- * 
- * 思考法エージェント向けの便利メソッドを提供
+ * プロバイダー作成関数の型定義
  */
-export class LLMIntegration {
-  private logger = Logger.getInstance();
+type ProviderCreator = (config: LLMProviderConfig) => LLMProvider;
+
+
+/**
+ * プロバイダー作成関数（シンプルなアプローチ）
+ */
+const createProviderCreator = (type: LLMProviderType): ProviderCreator => {
+  const config = LLM_PROVIDER_CONFIGS[type];
+
+  return (providerConfig: LLMProviderConfig) => {
+    const modelName = providerConfig.model || config.model!;
+
+    switch (type) {
+      case 'openai':
+        if (!providerConfig.apiKey && !process.env.OPENAI_API_KEY) {
+          throw new Error('OpenAI API key is required');
+        }
+        return openai(modelName);
+
+      case 'anthropic':
+        if (!providerConfig.apiKey && !process.env.ANTHROPIC_API_KEY) {
+          throw new Error('Anthropic API key is required');
+        }
+        return anthropic(modelName);
+
+      case 'google':
+        if (!providerConfig.apiKey && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+          throw new Error('Google Generative AI API key is required');
+        }
+        return google(modelName);
+
+      case 'openai-compatible':
+        if (!providerConfig.baseURL) {
+          throw new Error('Base URL is required for OpenAI-compatible provider');
+        }
+        return createOpenAI({
+          apiKey: providerConfig.apiKey || 'dummy-key',
+          baseURL: providerConfig.baseURL,
+        })(modelName);
+
+      case 'mock':
+        return {
+          provider: 'mock',
+          modelId: modelName,
+          settings: {},
+        };
+
+      default:
+        throw new Error(`Unknown provider type: ${type}`);
+    }
+  };
+};
+
+/**
+ * プロバイダー作成関数のマップ（動的生成）
+ */
+const providerCreators: Record<LLMProviderType, ProviderCreator> = SUPPORTED_PROVIDERS.reduce(
+  (acc, type) => ({ ...acc, [type]: createProviderCreator(type) }),
+  {} as Record<LLMProviderType, ProviderCreator>
+);
+
+/**
+ * LLMプロバイダーを登録する関数
+ */
+export const registerProvider = (name: string, config: LLMProviderConfig): void => {
+  const fullConfig = { ...LLM_PROVIDER_CONFIGS[config.type], ...config };
+  managerState.configs.set(name, fullConfig);
+
+  const creator = providerCreators[config.type];
+  if (!creator) {
+    throw new Error(`Unsupported provider type: ${config.type}`);
+  }
+
+  const provider = creator(fullConfig);
+  managerState.providers.set(name, provider);
+
+  // 最初に登録されたプロバイダーをデフォルトに設定
+  if (!managerState.defaultProvider) {
+    managerState.defaultProvider = name;
+  }
+};
+
+/**
+ * プロバイダーを取得する関数
+ */
+export const getProvider = (name?: string): LLMProvider => {
+  const providerName = name || managerState.defaultProvider;
+  if (!providerName) {
+    throw new Error('No LLM provider available');
+  }
+
+  const provider = managerState.providers.get(providerName);
+  if (!provider) {
+    throw new Error(`LLM provider not found: ${providerName}`);
+  }
+
+  return provider;
+};
+
+/**
+ * デフォルトプロバイダーを設定する関数
+ */
+export const setDefaultProvider = (name: string): void => {
+  if (!managerState.providers.has(name)) {
+    throw new Error(`Provider not registered: ${name}`);
+  }
+  managerState.defaultProvider = name;
+};
+
+/**
+ * 登録済みプロバイダー一覧を取得する関数
+ */
+export const listProviders = (): string[] => {
+  return Array.from(managerState.providers.keys());
+};
+
+/**
+ * プロバイダー設定を取得する関数
+ */
+export const getConfig = (name: string): LLMProviderConfig | undefined => {
+  return managerState.configs.get(name);
+};
+
+/**
+ * LLMProviderをLanguageModelに変換する関数
+ */
+export const toLanguageModel = (provider: LLMProvider): LanguageModel => {
+  // MockProviderの場合は特別な処理
+  if ('provider' in provider && provider.provider === 'mock') {
+    // モックプロバイダーの場合は、実際のモデルオブジェクトを返す
+    // ここではOpenAIのモデルをデフォルトとして使用
+    return openai('gpt-3.5-turbo') as LanguageModel;
+  }
   
-  constructor(private providerManager: LLMProviderManager) {}
+  // その他のプロバイダーはそのまま返す
+  return provider as LanguageModel;
+};
 
-  /**
-   * 構造化されたオブジェクト生成（自動復旧機能付き）
-   */
-  async generateStructuredOutput<T>(
-    schema: Schema,
-    systemPrompt: string,
-    userPrompt: string,
-    providerName?: string,
-    options?: GenerationOptions
-  ): Promise<T> {
-    const provider = this.providerManager.getProvider(providerName);
-    const maxRetries = options?.maxRetries || 3;
-    const enableAutoRecovery = options?.enableAutoRecovery ?? true;
-    
-    const attempts = Array.from({ length: maxRetries }, (_, i) => i + 1);
-    
-    const executeAttempt = async (attempt: number, currentSystemPrompt: string, currentOptions: GenerationOptions | undefined): Promise<T> => {
-      try {
-        const generateObjectOptions = {
-          model: provider as LanguageModel,
-          schema: schema as ZodSchema,
-          system: currentSystemPrompt,
-          prompt: userPrompt,
-          temperature: currentOptions?.temperature ?? 0.3,
-          mode: currentOptions?.mode ?? 'auto',
-          ...(currentOptions?.schemaName && { schemaName: currentOptions.schemaName }),
-          ...(currentOptions?.schemaDescription && { schemaDescription: currentOptions.schemaDescription }),
-        } as Parameters<typeof generateObject>[0];
+/**
+ * プロバイダー登録のための純粋関数
+ */
+type ProviderRegistration = {
+  type: LLMProviderType;
+  apiKey?: string;
+  model: string;
+};
 
-        const result = await generateObject(generateObjectOptions);
+const createProviderRegistration = (
+  type: LLMProviderType,
+  apiKeyEnvVar: string,
+  modelEnvVar: string
+): O.Option<ProviderRegistration> => {
+  const apiKey = process.env[apiKeyEnvVar];
+  const model = process.env[modelEnvVar];
+  const config = LLM_PROVIDER_CONFIGS[type];
+  
+  return apiKey ? O.some({
+    type,
+    apiKey,
+    model: model || config.model,
+  }) : O.none;
+};
 
-        // スキーマ検証（Zodスキーマの場合）
-        if (this.isZodSchema(schema) && enableAutoRecovery) {
-          const validation = schema.safeParse(result.object);
-          if (!validation.success) {
-            this.logger.error('Schema validation failed:', {
-              generatedObject: result.object,
-              validationErrors: validation.error.issues,
-              error: validation.error.message
-            });
-            throw new Error(`Schema validation failed: ${validation.error.message}`);
-          }
-        }
+const registerProviderIfAvailable = (registration: ProviderRegistration): E.Either<Error, undefined> => {
+  return E.tryCatch(
+    () => {
+      registerProvider(registration.type, registration);
+      return undefined;
+    },
+    (error) => error as Error
+  );
+};
 
-        return result.object as T;
-      } catch (error) {
-        const lastError = error instanceof Error ? error : new Error(String(error));
-        this.logger.warn('LLM generation attempt failed', {
-          attempt,
-          maxRetries,
-          error: lastError.message
-        });
-        
-        // 自動復旧機能：エラー内容に応じてプロンプトを調整
-        if (enableAutoRecovery && attempt < maxRetries) {
-          if (lastError.message.includes('Schema validation failed')) {
-            // スキーマエラーの場合：プロンプトに詳細な指示を追加
-            const enhancedPrompt = this.enhancePromptForSchemaCompliance(currentSystemPrompt, schema, lastError);
-            return await executeAttempt(attempt + 1, enhancedPrompt, currentOptions);
-          } else if (lastError.message.includes('timeout') || lastError.message.includes('rate limit')) {
-            // タイムアウトやレート制限の場合：温度を下げて安定化
-            const adjustedOptions = { ...currentOptions, temperature: Math.max((currentOptions?.temperature ?? 0.3) * 0.8, 0.1) };
-            return await executeAttempt(attempt + 1, currentSystemPrompt, adjustedOptions);
-          }
-        }
-        
-        if (attempt === maxRetries) {
-          // 全ての試行が失敗した場合、フォールバックプロバイダーを試行
-          if (enableAutoRecovery) {
-            return await this.tryFallbackProviders<T>(
-              schema, currentSystemPrompt, userPrompt, providerName, currentOptions
-            );
-          }
-          throw new Error(`LLM generation failed after ${maxRetries} attempts: ${lastError.message}`);
-        }
-        
-        // 指数バックオフで再試行
-        await this.sleep(Math.pow(2, attempt) * 1000);
-        return await executeAttempt(attempt + 1, currentSystemPrompt, currentOptions);
-      }
-    };
-    
-    return await executeAttempt(1, systemPrompt, options);
-  }
+const setDefaultProviderIfAvailable = (providerType: LLMProviderType): E.Either<Error, undefined> => {
+  return E.tryCatch(
+    () => {
+      setDefaultProvider(providerType);
+      return undefined;
+    },
+    (error) => error as Error
+  );
+};
 
-  /**
-   * スキーマ準拠のためのプロンプト強化
-   */
-  private enhancePromptForSchemaCompliance(
-    originalPrompt: string, 
-    schema: Schema, 
-    error: Error
-  ): string {
-    const schemaInfo = this.extractSchemaRequirements(schema);
-    return `${originalPrompt}
+/**
+ * グローバルLLMプロバイダーマネージャーの初期化（関数型版）
+ */
+export const initializeDefaultProviders = (): void => {
+  // プロバイダー登録の設定
+  const providerConfigs = [
+    { type: 'openai' as const, apiKeyEnv: 'OPENAI_API_KEY', modelEnv: 'OPENAI_MODEL' },
+    { type: 'anthropic' as const, apiKeyEnv: 'ANTHROPIC_API_KEY', modelEnv: 'ANTHROPIC_MODEL' },
+    { type: 'google' as const, apiKeyEnv: 'GOOGLE_GENERATIVE_AI_API_KEY', modelEnv: 'GOOGLE_MODEL' },
+  ];
 
-**重要**: 以下のJSONスキーマに厳密に準拠した形式で応答してください：
-
-${schemaInfo}
-
-前回のエラー: ${error.message}
-
-必須フィールドをすべて含め、データ型を正確に守ってください。`;
-  }
-
-  /**
-   * スキーマ要件の抽出
-   */
-  private extractSchemaRequirements(schema: Schema): string {
-    try {
-      if (this.isZodSchema(schema)) {
-        // Zodスキーマの場合
-        const schemaTypeName = this.getZodSchemaTypeName(schema);
-        return `Zodスキーマ型: ${schemaTypeName}`;
-      }
-      return 'JSONスキーマに準拠してください';
-    } catch {
-      return '指定されたスキーマ形式に準拠してください';
-    }
-  }
-
-  /**
-   * Zodスキーマの型名を取得（型安全）
-   */
-  private getZodSchemaTypeName(schema: ZodSchema): string {
-    // Zodスキーマの内部構造にアクセスする型安全な方法
-    const schemaWithDef = schema as { _def?: { typeName?: string } };
-    return schemaWithDef._def?.typeName || 'Object';
-  }
-
-  /**
-   * Zodスキーマかどうかを判定（型安全）
-   */
-  private isZodSchema(schema: Schema): schema is ZodSchema {
-    return (
-      typeof schema === 'object' && 
-      schema !== null && 
-      '_def' in schema &&
-      typeof (schema as { _def?: unknown })._def === 'object'
+  // 利用可能なプロバイダーを登録
+  const registrationResults = providerConfigs
+    .map(config => createProviderRegistration(config.type, config.apiKeyEnv, config.modelEnv))
+    .map(registration => 
+      pipe(
+        registration,
+        O.map(registerProviderIfAvailable),
+        O.getOrElse(() => E.right(undefined))
+      )
     );
-  }
 
-  /**
-   * フォールバックプロバイダーでの再試行
-   */
-  private async tryFallbackProviders<T>(
-    schema: Schema,
-    systemPrompt: string,
-    userPrompt: string,
-    excludeProvider?: string,
-    options?: GenerationOptions
-  ): Promise<T> {
-    const availableProviders = this.providerManager.listProviders()
-      .filter(name => name !== excludeProvider);
-    
-    for (const providerName of availableProviders) {
-      try {
-        this.logger.warn('Trying fallback provider', { providerName });
-        return await this.generateStructuredOutput<T>(
-          schema, systemPrompt, userPrompt, providerName, 
-          { ...options, maxRetries: 1, enableAutoRecovery: false }
-        );
-      } catch (error) {
-        this.logger.warn('Fallback provider failed', { 
-          providerName, 
-          error: error instanceof Error ? error.message : String(error) 
-        });
-        continue;
-      }
+  // エラーログ出力
+  registrationResults.forEach(result => {
+    if (E.isLeft(result)) {
+      logger.warn('Failed to register provider:', result.left);
     }
-    
-    throw new Error('All providers failed, including fallbacks');
-  }
-
-  /**
-   * テキスト生成
-   */
-  async generateText(
-    systemPrompt: string,
-    userPrompt: string,
-    providerName?: string,
-    options?: {
-      temperature?: number;
-      maxTokens?: number;
-      maxRetries?: number;
-    }
-  ): Promise<string> {
-    const provider = this.providerManager.getProvider(providerName);
-    const maxRetries = options?.maxRetries || 3;
-    
-    const attempts = Array.from({ length: maxRetries }, (_, i) => i + 1);
-    
-    const executeAttempt = async (attempt: number): Promise<string> => {
-      try {
-        const result = await generateText({
-          model: provider as LanguageModel,
-          system: systemPrompt,
-          prompt: userPrompt,
-          temperature: options?.temperature ?? 0.3,
-        });
-
-        return result.text;
-      } catch (error) {
-        this.logger.warn('LLM text generation attempt failed', {
-          attempt,
-          maxRetries,
-          error: error instanceof Error ? error.message : String(error)
-        });
-        
-        if (attempt === maxRetries) {
-          throw new Error(`LLM text generation failed after ${maxRetries} attempts: ${error}`);
-        }
-        
-        await this.sleep(Math.pow(2, attempt) * 1000);
-        return await executeAttempt(attempt + 1);
-      }
-    };
-    
-    return await executeAttempt(1);
-  }
-
-  /**
-   * 複数プロバイダーでのフォールバック生成
-   */
-  async generateWithFallback<T>(
-    schema: Schema,
-    systemPrompt: string,
-    userPrompt: string,
-    providerNames?: string[],
-    options?: { temperature?: number }
-  ): Promise<T> {
-    const providers = providerNames || this.providerManager.listProviders();
-    
-    for (const providerName of providers) {
-      try {
-        return await this.generateStructuredOutput<T>(
-          schema,
-          systemPrompt,
-          userPrompt,
-          providerName,
-          { ...options, maxRetries: 1 }
-        );
-      } catch (error) {
-        this.logger.warn('Provider failed, trying next', {
-          providerName,
-          error: error instanceof Error ? error.message : String(error)
-        });
-        continue;
-      }
-    }
-    
-    throw new Error('All LLM providers failed');
-  }
-
-  /**
-   * プロバイダーのヘルスチェック
-   */
-  async healthCheck(providerName?: string): Promise<boolean> {
-    try {
-      await this.generateText(
-        'You are a helpful assistant.',
-        'Say "OK" if you can respond.',
-        providerName,
-        { maxRetries: 1, maxTokens: 10 }
-      );
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * スリープユーティリティ
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-}
-
-/**
- * グローバルLLMプロバイダーマネージャーのインスタンス
- */
-export const globalLLMManager = new LLMProviderManager();
-
-/**
- * デフォルト設定でプロバイダーを初期化
- */
-export function initializeDefaultProviders(): void {
-  // OpenAIプロバイダー（環境変数があれば）
-  if (process.env.OPENAI_API_KEY) {
-    globalLLMManager.registerProvider('openai', {
-      type: 'openai',
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-  }
-
-  // Anthropicプロバイダー（環境変数があれば）
-  if (process.env.ANTHROPIC_API_KEY) {
-    globalLLMManager.registerProvider('anthropic', {
-      type: 'anthropic',
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-  }
-
-  // Googleプロバイダー（環境変数があれば）
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    globalLLMManager.registerProvider('google', {
-      type: 'google',
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-    });
-  }
-
-  // モックプロバイダー（開発・テスト用）
-  globalLLMManager.registerProvider('mock', {
-    type: 'mock',
   });
 
-  // 環境変数からデフォルトプロバイダーを設定
-  const defaultProvider = process.env.DEFAULT_LLM_PROVIDER;
-  if (defaultProvider && ['openai', 'anthropic', 'google', 'mock'].includes(defaultProvider)) {
-    // 指定されたプロバイダーが利用可能かチェック
-    const isOpenAIAvailable = process.env.OPENAI_API_KEY;
-    const isAnthropicAvailable = process.env.ANTHROPIC_API_KEY;
-    const isGoogleAvailable = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    
-    if (defaultProvider === 'openai' && isOpenAIAvailable) {
-      globalLLMManager.setDefaultProvider('openai');
-    } else if (defaultProvider === 'anthropic' && isAnthropicAvailable) {
-      globalLLMManager.setDefaultProvider('anthropic');
-    } else if (defaultProvider === 'google' && isGoogleAvailable) {
-      globalLLMManager.setDefaultProvider('google');
-    } else if (defaultProvider === 'mock') {
-      globalLLMManager.setDefaultProvider('mock');
-    }
-  } else {
-    // 環境変数で指定されていない場合、利用可能なプロバイダーから自動選択（OpenAI優先）
-    if (process.env.OPENAI_API_KEY) {
-      globalLLMManager.setDefaultProvider('openai');
-    } else if (process.env.ANTHROPIC_API_KEY) {
-      globalLLMManager.setDefaultProvider('anthropic');
-    } else if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      globalLLMManager.setDefaultProvider('google');
-    }
-  }
-}
+  // モックプロバイダーを常に登録
+  const mockConfig = LLM_PROVIDER_CONFIGS.mock;
+  const mockRegistration: ProviderRegistration = {
+    type: 'mock',
+    model: mockConfig.model,
+  };
+  
+  pipe(
+    registerProviderIfAvailable(mockRegistration),
+    E.fold(
+      (error) => logger.warn('Failed to register mock provider:', error),
+      () => logger.info('Mock provider registered successfully')
+    )
+  );
+
+  // デフォルトプロバイダーの設定
+  const defaultProviderResult = pipe(
+    O.fromNullable(process.env.DEFAULT_LLM_PROVIDER),
+    O.fold(
+      () => {
+        // 自動選択ロジック
+        if (process.env.OPENAI_API_KEY) {
+          return setDefaultProviderIfAvailable('openai');
+        } else if (process.env.ANTHROPIC_API_KEY) {
+          return setDefaultProviderIfAvailable('anthropic');
+        } else if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+          return setDefaultProviderIfAvailable('google');
+        } else {
+          return E.right(undefined);
+        }
+      },
+      (providerName) => setDefaultProviderIfAvailable(providerName as LLMProviderType)
+    )
+  );
+
+  // デフォルトプロバイダー設定の結果を処理
+  pipe(
+    defaultProviderResult,
+    E.fold(
+      (error) => logger.warn('Failed to set default provider:', error),
+      () => logger.info('Default provider set successfully')
+    )
+  );
+};
 
 // 自動初期化
 initializeDefaultProviders();
+
+/**
+ * グローバルLLMプロバイダーマネージャー
+ */
+export const globalLLMManager = {
+  getProvider: (name?: string) => getProvider(name),
+  getIntegration: () => ({
+    generateStructuredOutput: async <T>(
+      schema: Schema,
+      systemPrompt: string,
+      userPrompt: string,
+      providerName?: string,
+      options?: GenerationOptions
+    ): Promise<T> => {
+      const result = await generateStructuredOutput(schema, systemPrompt, userPrompt, providerName, options);
+      return result as T;
+    },
+    generateText: async (
+      systemPrompt: string,
+      userPrompt: string,
+      providerName?: string,
+      options?: GenerationOptions
+    ): Promise<string> => {
+      const provider = getProvider(providerName);
+      const result = await generateText({
+        model: provider as LanguageModel,
+        system: systemPrompt,
+        prompt: userPrompt,
+        temperature: options?.temperature ?? 0.3,
+      });
+      return result.text;
+    },
+    healthCheck: async (providerName?: string): Promise<boolean> => {
+      return await healthCheck(providerName);
+    }
+  }),
+  listProviders: () => listProviders(),
+  registerProvider: (name: string, config: LLMProviderConfig) => registerProvider(name, config),
+  setDefaultProvider: (name: string) => setDefaultProvider(name),
+  getConfig: (name: string) => getConfig(name)
+};

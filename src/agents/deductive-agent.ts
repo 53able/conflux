@@ -1,14 +1,22 @@
-import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
+import { 
+  type AgentCapability,
+  type FunctionalAgent,
+  type AgentConfig,
+  type PromptGenerator,
+  type ConfidenceCalculator,
+  type ReasoningGenerator,
+  type NextStepRecommender,
+} from '../core/agent-base.js';
 import { 
   ThinkingMethodType, 
-  DeductiveInput, 
-  DeductiveOutput,
   DevelopmentPhase, 
-  ThinkingResult
-} from '../schemas/thinking.js';
+} from '../schemas/index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { type DeductiveInput, type DeductiveOutput, DeductiveInputSchema, DeductiveOutputSchema } from '../schemas/index.js';
 
 /**
- * 演繹的思考エージェント
+ * 演繹的思考エージェント（関数型スタイル）
  * 
  * 機能:
  * 1. 大前提を把握する
@@ -21,169 +29,116 @@ import {
  * - デバッグ/障害対応（再現条件想定）
  * - テスト設計（仕様原則→テスト条件導出）
  */
-export class DeductiveThinkingAgent extends BaseThinkingAgent {
-  readonly capability: AgentCapability = {
-    methodType: 'deductive' as ThinkingMethodType,
-    description: '一般的な原則・理論から具体的な結論を論理的に導出する',
-    applicablePhases: [
-      'architecture_design',
-      'implementation',
-      'debugging',
-      'test_design'
-    ] as DevelopmentPhase[],
-    requiredInputSchema: DeductiveInput,
-    outputSchema: DeductiveOutput,
-    combinationSynergies: ['critical', 'logical', 'inductive'] as ThinkingMethodType[],
-  };
 
-  protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const promptTemplate = new DeductivePromptTemplate(this);
-    const { system, user } = promptTemplate.generatePrompts(input);
+// ============================================================================
+// 関数型スタイルの演繹的思考エージェント
+// ============================================================================
 
-    // AI SDKのgenerateObjectを使用してスキーマ保証
-    const result = await this.callLLMWithStructuredOutput(
-      DeductiveOutput,
-      system,
-      user,
-      context,
-      {
-        temperature: 0.1, // 演繹は論理的厳密性が重要
-        maxRetries: 3,
-        enableAutoRecovery: true,
-        schemaName: 'DeductiveOutput',
-        schemaDescription: '演繹的思考の分析結果を表す構造化データ',
-        mode: 'json',
-      }
-    );
 
-    return result as Record<string, unknown>;
-  }
+// エージェント能力定義
+const deductiveCapability: AgentCapability = {
+  methodType: 'deductive' as ThinkingMethodType,
+  description: '一般原則から具体的結論を導出する',
+  applicablePhases: [
+    'architecture_design',
+    'implementation',
+    'debugging',
+    'test_design'
+  ] as DevelopmentPhase[],
+  requiredInputSchema: DeductiveInputSchema,
+  outputSchema: DeductiveOutputSchema,
+  combinationSynergies: ['logical', 'critical', 'abduction'] as ThinkingMethodType[],
+};
 
-  /**
-   * 演繹的思考特有の入力正規化
-   */
-  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
-    const normalized = { ...input };
+// エージェント設定
+const deductiveConfig: AgentConfig = {
+  temperature: 0.1,
+  maxRetries: 3,
+  enableAutoRecovery: true,
+  schemaName: 'DeductiveOutput',
+  schemaDescription: '演繹的思考の分析結果を表す構造化データ',
+  mode: 'json'
+};
 
-    // 必須フィールドの正規化
-    if (!normalized.majorPremise) {
-      // majorPremiseが不足している場合、contentやtextから生成
-      const content = normalized.content || normalized.text || normalized.message || '';
-      normalized.majorPremise = content;
-    }
+// プロンプト生成関数
+const generateDeductivePrompts: PromptGenerator<DeductiveInput> = (input, capability) => {
+  // スキーマから動的にJSON例と注意事項を生成
+  const schemaExample = generateSchemaExample(capability.outputSchema);
+  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
 
-    if (!normalized.minorPremise) {
-      // minorPremiseが不足している場合、contextや追加情報から生成
-      const context = normalized.context || normalized.additionalInfo || '';
-      normalized.minorPremise = context || '具体的な状況';
-    }
+  const systemPrompt = `あなたは演繹的思考の専門家です。大前提と小前提から論理的に結論を導いてください。
 
-    // domainの正規化
-    if (!normalized.domain) {
-      normalized.domain = '';
-    }
+演繹的思考の手順:
+1. 大前提を正確に理解する
+2. 小前提を正確に理解する
+3. 論理的な推論ステップを構築する
+4. 結論を導出する
+5. 論理の妥当性を検証する
 
-    return normalized;
-  }
+重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
-    const deductiveOutput = output as DeductiveOutput;
-    
-    // 論理的妥当性と前提の信頼性から計算
-    const validityScore = deductiveOutput.validityCheck.isValid ? 0.5 : 0.1;
-    const reliabilityScore = deductiveOutput.validityCheck.premiseReliability * 0.4;
-    const implicationScore = Math.min(deductiveOutput.implications.length * 0.05, 0.1);
-    
-    return Math.min(validityScore + reliabilityScore + implicationScore, 1.0);
-  }
-
-  protected override generateReasoningExplanation(
-    input: unknown, 
-    output: Record<string, unknown>, 
-    _context: AgentContext
-  ): string {
-    const typedInput = input as { majorPremise: string; minorPremise: string };
-    const typedOutput = output as DeductiveOutput;
-    
-    const validityText = typedOutput.validityCheck.isValid ? '有効' : '問題あり';
-    const reliabilityPercent = (typedOutput.validityCheck.premiseReliability * 100).toFixed(1);
-    
-    return `大前提「${typedInput.majorPremise}」と小前提「${typedInput.minorPremise}」から演繹的に導出しました。論理的妥当性: ${validityText}、前提信頼性: ${reliabilityPercent}%。結論「${typedOutput.conclusion}」は${typedOutput.implications.length}個の含意を持ちます。`;
-  }
-
-  /**
-   * 演繹的思考後の次ステップ推奨
-   */
-  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
-    const baseRecommendations = super.getNextRecommendations(result, phase);
-    
-    // 演繹思考後は前提の検証が重要
-    const deductiveSpecific: ThinkingMethodType[] = ['critical'];
-    
-    // 結論の検証には帰納的思考も有効
-    if (phase === 'debugging' || phase === 'experimentation') {
-      deductiveSpecific.push('inductive');
-    }
-    
-    // アーキテクチャ設計では論理的構造化も重要
-    if (phase === 'architecture_design') {
-      deductiveSpecific.push('logical');
-    }
-
-    return [...new Set([...deductiveSpecific, ...baseRecommendations])];
-  }
-}
-
-class DeductivePromptTemplate extends LLMPromptTemplate {
-  constructor(private agent: DeductiveThinkingAgent) {
-    super();
-  }
-
-  protected getSystemPrompt(): string {
-    const schemaExample = this.agent.generateSchemaExample(DeductiveOutput);
-    
-    return `あなたは演繹的思考の専門家です。
-
-演繹的思考の構造:
-- 大前提: 一般的に正しいとされる理論・ルール・セオリー
-- 小前提: 具体的な事実・観察・状況
-- 結論: 大前提と小前提から論理必然的に導かれる帰結
-
-重要な原則:
-- 論理的妥当性の検証（論理構造が正しいか）
-- 前提の真実性の評価（前提が実際に正しいか）
-- 結論の含意の明確化（結論が何を意味するか）
-- 前提の脆弱性の認識（前提が崩れる条件）
-
-出力形式（JSON）:
 ${schemaExample}
 
-必ず上記のJSON形式で出力してください。`;
+注意事項:
+${schemaInstructions}
+
+演繹的思考の本質である「一般から特殊へ」の論理的推論を重視し、厳密で正確な結論導出を行ってください。`;
+
+  const userPrompt = `以下の大前提と小前提から、演繹的に結論を導いてください。
+
+大前提:
+${input.majorPremise}
+
+小前提:
+${input.minorPremise}
+
+${input.context ? `コンテキスト: ${input.context}` : ''}
+${input.domain ? `ドメイン: ${input.domain}` : ''}
+
+上記の前提から論理的に結論を導出し、推論プロセスを詳細に説明してください。`;
+
+  return E.right({ system: systemPrompt, user: userPrompt });
+};
+
+// 信頼度計算関数
+const calculateDeductiveConfidence: ConfidenceCalculator<DeductiveOutput> = (output, _context) => {
+  // 演繹的思考の信頼度は論理の妥当性と推論ステップの明確さに基づく
+  const validityBonus = output.validityCheck.isValid ? 0.2 : 0;
+  const premiseReliabilityBonus = output.validityCheck.premiseReliability * 0.1;
+  const implicationsBonus = Math.min(output.implications.length * 0.05, 0.2);
+  const baseConfidence = output.confidence;
+  
+  return Math.min(baseConfidence + validityBonus + premiseReliabilityBonus + implicationsBonus, 1.0);
+};
+
+// 推論説明生成関数
+const generateDeductiveReasoning: ReasoningGenerator<DeductiveInput, DeductiveOutput> = (input, output, _context) => {
+  return `「${input.majorPremise}」という大前提と「${input.minorPremise}」という小前提から、演繹的に「${output.conclusion}」という結論を導出しました。論理の妥当性: ${output.validityCheck.isValid ? '妥当' : '不適切'}、前提の信頼性: ${(output.validityCheck.premiseReliability * 100).toFixed(1)}%、含意数: ${output.implications.length}個、信頼度: ${(output.confidence * 100).toFixed(1)}%`;
+};
+
+// 次ステップ推奨関数
+const recommendDeductiveNextSteps: NextStepRecommender = (_result, phase) => {
+  const baseRecommendations: ThinkingMethodType[] = ['logical', 'critical'];
+  
+  // アーキ設計ではMECE思考も有効
+  if (phase === 'architecture_design') {
+    baseRecommendations.push('mece');
+  }
+  
+  // 実装では帰納的思考も重要
+  if (phase === 'implementation') {
+    baseRecommendations.push('inductive');
   }
 
-  protected getUserPrompt(input: unknown): string {
-    const { majorPremise, minorPremise, domain } = input as { 
-      majorPremise: string; 
-      minorPremise: string; 
-      domain?: string 
-    };
+  return baseRecommendations;
+};
 
-    return `以下の前提から演繹的推論を行ってください。
-
-## 大前提（一般原則）
-${majorPremise}
-
-## 小前提（具体事実）
-${minorPremise}
-
-${domain ? `## 適用領域\n${domain}\n` : ''}
-
-## 求める演繹的分析
-
-1. **論理的結論の導出**
-2. **妥当性検証**: 論理構造と前提の信頼性評価
-3. **含意の特定**: 結論が示す具体的な意味・帰結
-
-演繹の論証力の高さを活かしつつ、前提の限界も認識した分析を行ってください。`;
-  }
-}
+// 関数型エージェントの定義
+export const deductiveAgent: FunctionalAgent<DeductiveInput, DeductiveOutput> = {
+  capability: deductiveCapability,
+  config: deductiveConfig,
+  generatePrompts: generateDeductivePrompts,
+  calculateConfidence: calculateDeductiveConfidence,
+  generateReasoning: generateDeductiveReasoning,
+  recommendNextSteps: recommendDeductiveNextSteps,
+};

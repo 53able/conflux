@@ -1,202 +1,149 @@
-import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
+import { 
+  type AgentCapability,
+  type FunctionalAgent,
+  type AgentConfig,
+  type PromptGenerator,
+  type ConfidenceCalculator,
+  type ReasoningGenerator,
+  type NextStepRecommender,
+} from '../core/agent-base.js';
 import { 
   ThinkingMethodType, 
-  DevelopmentPhase,
-  ThinkingResult,
-  AbductionInput, 
-  AbductionOutput
-} from '../schemas/thinking.js';
+  DevelopmentPhase, 
+} from '../schemas/index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { type AbductionInput, type AbductionOutput, AbductionInputSchema, AbductionOutputSchema } from '../schemas/index.js';
 
 /**
- * アブダクション思考エージェント
+ * アブダクション思考エージェント（関数型スタイル）
  * 
  * 機能:
- * 1. 驚くべき事実に出合う
- * 2. 説明仮説を立てる 
- * 3. 説明仮説を検証する
+ * 1. 驚きの事実を特定する
+ * 2. 説明仮説を生成する
+ * 3. 仮説の妥当性を評価する
  * 
  * 適用場面:
- * - 事業/課題の探索
- * - デバッグ/障害対応
- * - 未知の現象の分析
+ * - 事業探索
+ * - デバッグ・障害分析
+ * - 問題解決
  */
-export class AbductionAgent extends BaseThinkingAgent {
-  readonly capability: AgentCapability = {
-    methodType: 'abduction' as ThinkingMethodType,
-    description: '驚きの事実から最尤説明仮説を形成し、検証可能な予測を導出する',
-    applicablePhases: [
-      'business_exploration',
-      'debugging', 
-      'experimentation',
-      'hypothesis_breakdown'
-    ] as DevelopmentPhase[],
-    requiredInputSchema: AbductionInput,
-    outputSchema: AbductionOutput,
-    combinationSynergies: ['deductive', 'inductive', 'critical'] as ThinkingMethodType[],
-  };
 
-  /**
-   * LLMを使った アブダクション思考の実行（自動復旧機能付き）
-   */
-  protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const typedInput = input as { surprisingFact: string; context?: string; domain?: string };
-    const promptTemplate = new AbductionPromptTemplate(this);
-    const { system, user } = promptTemplate.generatePrompts(typedInput);
+// ============================================================================
+// 関数型スタイルのアブダクション思考エージェント
+// ============================================================================
 
-    // AI SDKのgenerateObjectを使用してスキーマ保証
-    const result = await this.callLLMWithStructuredOutput(
-      AbductionOutput,
-      system,
-      user,
-      context,
-      {
-        temperature: 0.7, // 創造的な仮説生成のために少し高め
-        maxRetries: 3,
-        enableAutoRecovery: true,
-        schemaName: 'AbductionOutput',
-        schemaDescription: 'アブダクション思考の分析結果を表す構造化データ',
-        mode: 'json',
-      }
-    );
 
-    return result as Record<string, unknown>;
-  }
+// エージェント能力定義
+const abductionCapability: AgentCapability = {
+  methodType: 'abduction' as ThinkingMethodType,
+  description: '驚きの事実から説明仮説を形成する',
+  applicablePhases: [
+    'business_exploration',
+    'debugging'
+  ] as DevelopmentPhase[],
+  requiredInputSchema: AbductionInputSchema,
+  outputSchema: AbductionOutputSchema,
+  combinationSynergies: ['critical', 'deductive', 'inductive', 'meta'],
+};
 
-  /**
-   * アブダクション思考特有の信頼度計算
-   */
-  /**
-   * アブダクション思考特有の入力正規化
-   */
-  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
-    const normalized = { ...input };
+// エージェント設定
+const abductionConfig: AgentConfig = {
+  temperature: 0.4,
+  maxRetries: 3,
+  enableAutoRecovery: true,
+  schemaName: 'AbductionOutput',
+  schemaDescription: 'アブダクション思考の分析結果を表す構造化データ',
+  mode: 'json'
+};
 
-    // 必須フィールドの正規化
-    if (!normalized.surprisingFact) {
-      // surprisingFactが不足している場合、contentやtextから生成
-      const content = normalized.content || normalized.text || normalized.message || '';
-      normalized.surprisingFact = content;
-    }
+// プロンプト生成関数
+const generateAbductionPrompts: PromptGenerator<AbductionInput> = (input, capability) => {
+  // スキーマから動的にJSON例と注意事項を生成
+  const schemaExample = generateSchemaExample(capability.outputSchema);
+  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
 
-    // contextの正規化
-    if (!normalized.context) {
-      normalized.context = '';
-    }
-
-    // domainの正規化
-    if (!normalized.domain) {
-      normalized.domain = '';
-    }
-
-    return normalized;
-  }
-
-  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
-    const abductionOutput = output as AbductionOutput;
-    
-    // 仮説数と妥当性スコアから信頼度を算出
-    const avgPlausibility = abductionOutput.hypotheses.reduce(
-      (sum, h) => sum + h.plausibility, 0
-    ) / abductionOutput.hypotheses.length;
-    
-    // 仮説の多様性もプラス要因
-    const diversityBonus = Math.min(abductionOutput.hypotheses.length * 0.1, 0.3);
-    
-    return Math.min(avgPlausibility + diversityBonus, 1.0);
-  }
-
-  /**
-   * アブダクション思考の推論説明生成
-   */
-  protected override generateReasoningExplanation(
-    input: unknown, 
-    output: Record<string, unknown>, 
-    _context: AgentContext
-  ): string {
-    const typedInput = input as { surprisingFact: string; context?: string };
-    const typedOutput = output as AbductionOutput;
-    
-    const topHypothesis = typedOutput.hypotheses.reduce((best, current) => 
-      current.plausibility > best.plausibility ? current : best
-    );
-
-    return `「${typedInput.surprisingFact}」という驚くべき事実に対して、${typedOutput.hypotheses.length}個の説明仮説を生成しました。最も有望な仮説は「${topHypothesis.explanation}」（妥当性: ${(topHypothesis.plausibility * 100).toFixed(1)}%）です。この仮説は${topHypothesis.testablePredicitions.length}個の検証可能な予測を含んでいます。`;
-  }
-
-  /**
-   * アブダクション思考後の次ステップ推奨
-   */
-  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
-    const baseRecommendations = super.getNextRecommendations(result, phase);
-    
-    // アブダクション後は仮説検証が重要
-    const abductionSpecific: ThinkingMethodType[] = ['deductive', 'inductive'];
-    
-    // 複数仮説がある場合はクリティカル思考で精査
-    if (result.output && 'hypotheses' in result.output && Array.isArray(result.output.hypotheses) && result.output.hypotheses.length > 1) {
-      abductionSpecific.push('critical');
-    }
-
-    return [...new Set([...abductionSpecific, ...baseRecommendations])];
-  }
-}
-
-/**
- * アブダクション思考用のプロンプトテンプレート
- */
-class AbductionPromptTemplate extends LLMPromptTemplate {
-  constructor(private agent: AbductionAgent) {
-    super();
-  }
-
-  protected getSystemPrompt(): string {
-    const schemaExample = this.agent.generateSchemaExample(AbductionOutput);
-    
-    return `あなたはアブダクション（仮説形成）思考の専門家です。
+  const systemPrompt = `あなたはアブダクション思考の専門家です。驚きの事実から最も可能性の高い説明仮説を生成してください。
 
 アブダクション思考の手順:
-1. 【驚くべき事実の特定】: 提示された現象の「予想外」「意外」な側面を明確化
-2. 【説明仮説の生成】: その事実を最も合理的に説明できる仮説を複数生成
-3. 【検証計画の立案】: 各仮説から導かれる予測可能な結果を特定
+1. 驚きの事実を正確に理解する
+2. 可能な説明仮説を複数生成する
+3. 各仮説の妥当性を評価する
+4. 最も可能性の高い仮説を選択する
 
-重要な原則:
-- 帰納的思考との違い: 単なるパターン認識ではなく「なぜそうなるのか」の因果メカニズムを重視
-- 複数の競合する仮説を生成し、それぞれの妥当性を評価
-- 各仮説から演繹的に導かれる「検証可能な予測」を明示
-- 最尤仮説を選択しつつ、代替仮説の可能性も保持
+重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-出力形式（JSON）:
 ${schemaExample}
 
-必ず上記のJSON形式で出力してください。`;
+注意事項:
+${schemaInstructions}
+
+アブダクション思考の本質である「最良の説明」を重視し、創造的かつ論理的な仮説生成を行ってください。`;
+
+  const userPrompt = `以下の驚きの事実について、最も可能性の高い説明仮説を生成してください。
+
+驚きの事実:
+${input.surprisingFact}
+
+${input.context ? `コンテキスト: ${input.context}` : ''}
+${input.domain ? `ドメイン: ${input.domain}` : ''}
+
+上記の事実を説明する最も可能性の高い仮説を生成し、その理由を説明してください。`;
+
+  return E.right({ system: systemPrompt, user: userPrompt });
+};
+
+// 信頼度計算関数
+const calculateAbductionConfidence: ConfidenceCalculator<AbductionOutput> = (output, _context) => {
+  // アブダクションの信頼度は仮説の論理的整合性と証拠の強さに基づく
+  const baseConfidence = output.confidence;
+  
+  // 仮説の説明の詳細さによるボーナス
+  const explanationBonus = output.hypotheses.length > 0 
+    ? Math.min(output.hypotheses[0].explanation.length / 200, 0.2)
+    : 0;
+  
+  // 推論の論理性によるボーナス
+  const reasoningBonus = output.reasoning.includes('論理的') || output.reasoning.includes('証拠') ? 0.1 : 0;
+  
+  // 仮説の妥当性によるボーナス
+  const plausibilityBonus = output.hypotheses.length > 0 
+    ? output.hypotheses[0].plausibility * 0.1
+    : 0;
+  
+  return Math.min(baseConfidence + explanationBonus + reasoningBonus + plausibilityBonus, 1.0);
+};
+
+// 推論説明生成関数
+const generateAbductionReasoning: ReasoningGenerator<AbductionInput, AbductionOutput> = (input, output, _context) => {
+  const topHypothesis = output.hypotheses.length > 0 ? output.hypotheses[0] : null;
+  const hypothesisText = topHypothesis ? topHypothesis.explanation : '仮説なし';
+  return `「${input.surprisingFact}」という驚きの事実から、アブダクション思考により${output.hypotheses.length}個の仮説を生成しました。最も可能性の高い仮説: ${hypothesisText}（信頼度: ${(output.confidence * 100).toFixed(1)}%）`;
+};
+
+// 次ステップ推奨関数
+const recommendAbductionNextSteps: NextStepRecommender = (result, phase) => {
+  const baseRecommendations: ThinkingMethodType[] = ['critical', 'deductive'];
+  
+  // 事業探索では帰納的思考とメタ思考も有効
+  if (phase === 'business_exploration') {
+    baseRecommendations.push('inductive', 'meta');
+  }
+  
+  // デバッグでは論理的思考も重要
+  if (phase === 'debugging') {
+    baseRecommendations.push('logical');
   }
 
-  protected getUserPrompt(input: unknown): string {
-    const { surprisingFact, context, domain } = input as { 
-      surprisingFact: string; 
-      context?: string; 
-      domain?: string 
-    };
+  return baseRecommendations;
+};
 
-    return `以下の驚くべき事実について、アブダクション思考を適用して分析してください。
-
-## 驚くべき事実
-${surprisingFact}
-
-${context ? `## コンテキスト\n${context}\n` : ''}
-${domain ? `## 対象ドメイン\n${domain}\n` : ''}
-
-## 求める分析
-
-1. **説明仮説の生成** (3-5個)
-   - この事実を最も合理的に説明できる仮説
-   - 各仮説の妥当性スコア (0-1)
-   - 仮説が正しい場合に予測される兆候/結果
-
-2. **推奨次ステップ**
-   - この仮説検証に最適な次の思考法
-   - 検証実験の方向性
-
-アブダクション思考の本質である「最尤説明の推論」を重視し、創造的かつ論理的な分析を行ってください。`;
-  }
-}
+// 関数型エージェントの定義
+export const abductionAgent: FunctionalAgent<AbductionInput, AbductionOutput> = {
+  capability: abductionCapability,
+  config: abductionConfig,
+  generatePrompts: generateAbductionPrompts,
+  calculateConfidence: calculateAbductionConfidence,
+  generateReasoning: generateAbductionReasoning,
+  recommendNextSteps: recommendAbductionNextSteps,
+};

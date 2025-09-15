@@ -1,14 +1,22 @@
-import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
+import { 
+  type AgentCapability,
+  type FunctionalAgent,
+  type AgentConfig,
+  type PromptGenerator,
+  type ConfidenceCalculator,
+  type ReasoningGenerator,
+  type NextStepRecommender,
+} from '../core/index.js';
 import { 
   ThinkingMethodType, 
-  MECEInput, 
-  MECEOutput,
   DevelopmentPhase, 
-  ThinkingResult
-} from '../schemas/thinking.js';
+} from '../schemas/index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { type MECEInput, type MECEOutput, MECEInputSchema, MECEOutputSchema  } from '../schemas/index.js';
 
 /**
- * MECE思考エージェント
+ * MECE思考エージェント（関数型スタイル）
  * 
  * 機能:
  * 1. 情報収集の目的を設定する
@@ -21,185 +29,123 @@ import {
  * - コードレビュー（観点漏れ防止）
  * - テスト設計（同値分割・境界網羅）
  */
-export class MECEAgent extends BaseThinkingAgent {
-  readonly capability: AgentCapability = {
-    methodType: 'mece' as ThinkingMethodType,
-    description: '項目を漏れなく重複なく分類し、構造化された全体像を構築する',
-    applicablePhases: [
-      'prioritization',
-      'refactoring', 
-      'code_review',
-      'test_design'
-    ] as DevelopmentPhase[],
-    requiredInputSchema: MECEInput,
-    outputSchema: MECEOutput,
-    combinationSynergies: ['logical', 'critical'] as ThinkingMethodType[],
-  };
 
-  protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const typedInput = input as { purpose: string; items: string[]; proposedCriteria?: string };
-    const promptTemplate = new MECEPromptTemplate(this);
-    const { system, user } = promptTemplate.generatePrompts(typedInput);
+// ============================================================================
+// 関数型スタイルのMECE思考エージェント
+// ============================================================================
 
-    // AI SDKのgenerateObjectを使用してスキーマ保証
-    const result = await this.callLLMWithStructuredOutput(
-      MECEOutput,
-      system,
-      user,
-      context,
-      {
-        temperature: 0.2, // 論理的分類なので低めの温度設定
-        maxRetries: 3,
-        enableAutoRecovery: true,
-        schemaName: 'MECEOutput',
-        schemaDescription: 'MECE思考の分析結果を表す構造化データ',
-        mode: 'json',
-      }
-    );
 
-    return result as Record<string, unknown>;
-  }
 
-  /**
-   * MECE思考特有の入力正規化
-   */
-  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
-    const normalized = { ...input };
+// エージェント能力定義
+const meceCapability: AgentCapability = {
+  methodType: 'mece' as ThinkingMethodType,
+  description: '漏れなく重複なく分類・整理する',
+  applicablePhases: [
+    'prioritization',
+    'refactoring',
+    'code_review',
+    'test_design'
+  ] as DevelopmentPhase[],
+  requiredInputSchema: MECEInputSchema,
+  outputSchema: MECEOutputSchema,
+  combinationSynergies: ['logical', 'critical', 'deductive', 'meta'],
+};
 
-    // 必須フィールドの正規化
-    if (!normalized.purpose) {
-      // purposeが不足している場合、contentやtextから生成
-      const content = normalized.content || normalized.text || normalized.message || '';
-      normalized.purpose = content;
-    }
+// エージェント設定
+const meceConfig: AgentConfig = {
+  temperature: 0.2,
+  maxRetries: 3,
+  enableAutoRecovery: true,
+  schemaName: 'MECEOutput',
+  schemaDescription: 'MECE思考の分析結果を表す構造化データ',
+  mode: 'json'
+};
 
-    // itemsの正規化
-    if (!normalized.items) {
-      normalized.items = [];
-    } else if (typeof normalized.items === 'string') {
-      normalized.items = [normalized.items];
-    } else if (Array.isArray(normalized.items)) {
-      // 配列の各要素が文字列でない場合は文字列に変換
-      normalized.items = normalized.items.map(item => String(item));
-    }
+// プロンプト生成関数
+const generateMECEPrompts: PromptGenerator<MECEInput> = (input, capability) => {
+  // スキーマから動的にJSON例と注意事項を生成
+  const schemaExample = generateSchemaExample(capability.outputSchema);
+  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
 
-    // proposedCriteriaの正規化
-    if (!normalized.proposedCriteria) {
-      normalized.proposedCriteria = '';
-    }
+  const systemPrompt = `あなたはMECE思考の専門家です。情報を漏れなく重複なく分類・整理してください。
 
-    return normalized;
-  }
+MECE思考の手順:
+1. 目的を明確にする
+2. 分類基準を設定する
+3. 項目を分類する
+4. 漏れとダブりをチェックする
 
-  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
-    const meceOutput = output as MECEOutput;
-    
-    // 完全性スコアがベース
-    let confidence = meceOutput.completenessScore;
-    
-    // 漏れやダブりが少ないほど信頼度向上
-    const gapPenalty = meceOutput.gaps.length * 0.05;
-    const overlapPenalty = meceOutput.overlaps.length * 0.1;
-    
-    confidence = Math.max(0, confidence - gapPenalty - overlapPenalty);
-    
-    return Math.min(confidence, 1.0);
-  }
+重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-  protected override generateReasoningExplanation(
-    input: unknown, 
-    output: Record<string, unknown>, 
-    _context: AgentContext
-  ): string {
-    const typedInput = input as { purpose: string; items: string[] };
-    const typedOutput = output as MECEOutput;
-    
-    return `「${typedInput.purpose}」を目的として、${typedInput.items.length}個の項目を「${typedOutput.criteria}」の基準で分類しました。結果: ${typedOutput.categories.length}カテゴリに整理、完全性スコア${(typedOutput.completenessScore * 100).toFixed(1)}%。漏れ${typedOutput.gaps.length}個、重複${typedOutput.overlaps.length}個を特定し、MECEの原則に沿って構造化を行いました。`;
-  }
-
-  /**
-   * MECE思考後の次ステップ推奨
-   */
-  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
-    const baseRecommendations = super.getNextRecommendations(result, phase);
-    
-    // MECE思考後は論理的構造化が重要
-    const meceSpecific: ThinkingMethodType[] = ['logical'];
-    
-    // 分類結果の検証にはクリティカル思考も有効
-    if (phase === 'code_review' || phase === 'refactoring') {
-      meceSpecific.push('critical');
-    }
-    
-    // 優先順位付けでは各カテゴリの評価が必要
-    if (phase === 'prioritization') {
-      meceSpecific.push('meta');
-    }
-
-    return [...new Set([...meceSpecific, ...baseRecommendations])];
-  }
-}
-
-class MECEPromptTemplate extends LLMPromptTemplate {
-  constructor(private agent: MECEAgent) {
-    super();
-  }
-
-  protected getSystemPrompt(): string {
-    const schemaExample = this.agent.generateSchemaExample(MECEOutput);
-    
-    return `あなたはMECE（Mutually Exclusive and Collectively Exhaustive）思考の専門家です。
-
-MECEの手順:
-1. 【目的の明確化】: 分類の目的と意図を明確化
-2. 【分類軸の設定】: 目的に最適な切り口を設計
-3. 【カテゴリ分け】: 各項目を適切なカテゴリに配置
-4. 【完全性チェック】: 漏れ（Missing）とダブり（Overlap）を検証
-
-重要な原則:
-- Mutually Exclusive: 各カテゴリが相互排他的（重複なし）
-- Collectively Exhaustive: 全体を網羅している（漏れなし）
-- 分類軸は目的に対して意味がある変数を選択
-- 粒度を揃える（同じレベルの抽象度で分類）
-
-出力形式（JSON）:
 ${schemaExample}
 
-必ず上記のJSON形式で出力してください。`;
+注意事項:
+${schemaInstructions}
+
+MECE思考の本質である「Mutually Exclusive, Collectively Exhaustive」を重視し、体系的で完全な分類を行ってください。`;
+
+  const userPrompt = `以下の項目をMECE思考により分類・整理してください。
+
+目的:
+${input.purpose}
+
+項目:
+${(input.items || []).map((item, i) => `${i + 1}. ${item}`).join('\n')}
+
+${input.proposedCriteria ? `提案された分類基準: ${input.proposedCriteria}` : ''}
+
+上記の項目を漏れなく重複なく分類し、見つかった漏れや重複も報告してください。`;
+
+  return E.right({ system: systemPrompt, user: userPrompt });
+};
+
+// 信頼度計算関数
+const calculateMECEConfidence: ConfidenceCalculator<MECEOutput> = (output, _context) => {
+  // MECEの信頼度は分類の完全性と一貫性に基づく
+  const _totalItems = (output.categories || []).reduce((sum, cat) => sum + (cat.items || []).length, 0);
+  const gaps = (output.gaps || []).length;
+  const overlaps = (output.overlaps || []).length;
+  
+  // 漏れと重複が少ないほど信頼度が高い
+  const completenessBonus = Math.max(0, 1 - (gaps + overlaps) * 0.1);
+  const baseConfidence = output.completenessScore || 0;
+  
+  return Math.min(baseConfidence * completenessBonus, 1.0);
+};
+
+// 推論説明生成関数
+const generateMECEReasoning: ReasoningGenerator<MECEInput, MECEOutput> = (input, output, _context) => {
+  return `「${input.purpose}」を目的として、${(input.items || []).length}個の項目を${(output.categories || []).length}個のカテゴリに分類しました。分類基準: ${output.criteria || '未設定'}。漏れ: ${(output.gaps || []).length}個、重複: ${(output.overlaps || []).length}個を特定し、MECE原則に基づく体系的な整理を実現しました（完全性スコア: ${((output.completenessScore || 0) * 100).toFixed(1)}%）`;
+};
+
+// 次ステップ推奨関数
+const recommendMECENextSteps: NextStepRecommender = (_result, phase) => {
+  const baseRecommendations: ThinkingMethodType[] = ['logical', 'critical'];
+  
+  // 優先順位付けではメタ思考も有効
+  if (phase === 'prioritization') {
+    baseRecommendations.push('meta');
+  }
+  
+  // テスト設計では演繹的思考と帰納的思考も重要
+  if (phase === 'test_design') {
+    baseRecommendations.push('deductive', 'inductive');
+  }
+  
+  // コードレビューでは演繹的思考も重要
+  if (phase === 'code_review') {
+    baseRecommendations.push('deductive');
   }
 
-  protected getUserPrompt(input: unknown): string {
-    const { purpose, items, proposedCriteria } = input as { 
-      purpose: string; 
-      items: string[]; 
-      proposedCriteria?: string 
-    };
+  return baseRecommendations;
+};
 
-    return `以下の項目をMECEの原則に従って分類してください。
-
-## 分類目的
-${purpose}
-
-## 分類対象項目
-${items.map((item, index) => `${index + 1}. ${item}`).join('\n')}
-
-${proposedCriteria ? `## 提案された分類基準\n${proposedCriteria}\n` : ''}
-
-## 求める分析
-
-1. **最適な分類基準の決定**
-   - 目的に最も適した切り口
-   - 項目の性質を考慮した分類軸
-
-2. **MECE分類の実行**
-   - 各カテゴリへの項目配置
-   - カテゴリごとのカバレッジ説明
-
-3. **完全性検証**
-   - 漏れている項目/観点の特定
-   - 重複している項目の指摘
-   - 完全性スコア（0-1）の算出
-
-漏れなく重複なく、かつ実用的な分類構造を提示してください。`;
-  }
-}
+// 関数型エージェントの定義
+export const meceAgent: FunctionalAgent<MECEInput, MECEOutput> = {
+  capability: meceCapability,
+  config: meceConfig,
+  generatePrompts: generateMECEPrompts,
+  calculateConfidence: calculateMECEConfidence,
+  generateReasoning: generateMECEReasoning,
+  recommendNextSteps: recommendMECENextSteps,
+};

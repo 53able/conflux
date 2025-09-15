@@ -1,14 +1,22 @@
-import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
+import { 
+  type AgentCapability,
+  type FunctionalAgent,
+  type AgentConfig,
+  type PromptGenerator,
+  type ConfidenceCalculator,
+  type ReasoningGenerator,
+  type NextStepRecommender,
+} from '../core/agent-base.js';
 import { 
   ThinkingMethodType, 
-  DevelopmentPhase,
-  ThinkingResult,
-  LogicalInput, 
-  LogicalOutput
-} from '../schemas/thinking.js';
+  DevelopmentPhase, 
+} from '../schemas/index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { type LogicalInput, type LogicalOutput, LogicalInputSchema, LogicalOutputSchema } from '../schemas/index.js';
 
 /**
- * ロジカルシンキング思考エージェント
+ * ロジカルシンキング思考エージェント（関数型スタイル）
  * 
  * 機能:
  * 1. 論点を決める
@@ -22,200 +30,124 @@ import {
  * - 優先順位付け
  * - ふりかえり/改善
  */
-export class LogicalThinkingAgent extends BaseThinkingAgent {
-  readonly capability: AgentCapability = {
-    methodType: 'logical' as ThinkingMethodType,
-    description: '論点から結論への論理的道筋を構築し、ピラミッド構造で整理する',
-    applicablePhases: [
-      'requirement_definition',
-      'prioritization', 
-      'estimation_planning',
-      'retrospective'
-    ] as DevelopmentPhase[],
-    requiredInputSchema: LogicalInput,
-    outputSchema: LogicalOutput,
-    combinationSynergies: ['mece', 'critical', 'meta'] as ThinkingMethodType[],
-  };
 
-  /**
-   * LLMを使ったロジカルシンキング思考の実行
-   */
-  protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const typedInput = input as { question: string; information?: string[]; constraints?: string[] };
-    const promptTemplate = new LogicalThinkingPromptTemplate(this);
-    const { system, user } = promptTemplate.generatePrompts(typedInput);
+// ============================================================================
+// 関数型スタイルのロジカルシンキングエージェント
+// ============================================================================
 
-    // AI SDKのgenerateObjectを使用してスキーマ保証
-    const result = await this.callLLMWithStructuredOutput(
-      LogicalOutput,
-      system,
-      user,
-      context,
-      {
-        temperature: 0.3, // 論理的思考なので創造性よりも一貫性を重視
-        maxRetries: 3,
-        enableAutoRecovery: true,
-        schemaName: 'LogicalOutput',
-        schemaDescription: 'ロジカル思考の分析結果を表す構造化データ',
-        mode: 'json',
-      }
-    );
 
-    return result as Record<string, unknown>;
-  }
+// エージェント能力定義
+const logicalCapability: AgentCapability = {
+  methodType: 'logical' as ThinkingMethodType,
+  description: '論点から結論への論理的道筋を構築する',
+  applicablePhases: [
+    'requirement_definition',
+    'estimation_planning',
+    'prioritization',
+    'retrospective'
+  ] as DevelopmentPhase[],
+  requiredInputSchema: LogicalInputSchema,
+  outputSchema: LogicalOutputSchema,
+  combinationSynergies: ['critical', 'mece', 'deductive', 'meta']
+};
 
-  /**
-   * ロジカルシンキング特有の信頼度計算
-   */
-  /**
-   * ロジカル思考特有の入力正規化
-   */
-  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
-    const normalized = { ...input };
+// エージェント設定
+const logicalConfig: AgentConfig = {
+  temperature: 0.3,
+  maxRetries: 3,
+  enableAutoRecovery: true,
+  schemaName: 'LogicalOutput',
+  schemaDescription: 'ロジカルシンキングの分析結果を表す構造化データ',
+  mode: 'json'
+};
 
-    // 必須フィールドの正規化
-    if (!normalized.question) {
-      // questionが不足している場合、contentやtextから生成
-      const content = normalized.content || normalized.text || normalized.message || '';
-      normalized.question = content;
-    }
+// プロンプト生成関数
+const generateLogicalPrompts: PromptGenerator<LogicalInput> = (input, capability) => {
+  // スキーマから動的にJSON例と注意事項を生成
+  const schemaExample = generateSchemaExample(capability.outputSchema);
+  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
 
-    // informationの正規化
-    if (!normalized.information) {
-      normalized.information = [];
-    } else if (typeof normalized.information === 'string') {
-      normalized.information = [normalized.information];
-    }
-
-    // constraintsの正規化
-    if (!normalized.constraints) {
-      normalized.constraints = [];
-    } else if (typeof normalized.constraints === 'string') {
-      normalized.constraints = [normalized.constraints];
-    }
-
-    return normalized;
-  }
-
-  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
-    const logicalOutput = output as LogicalOutput;
-    
-    // 論理ステップの数と根拠の豊富さから信頼度を算出
-    const stepCount = logicalOutput.reasoning.length;
-    const evidenceCount = logicalOutput.reasoning.reduce(
-      (sum, step) => sum + step.evidence.length, 0
-    );
-    
-    // ピラミッド構造の完成度
-    const pyramidCompleteness = logicalOutput.pyramid.supports.length > 0 ? 0.3 : 0;
-    
-    // 基本信頼度 + ステップ評価 + 根拠評価 + 構造評価
-    const baseConfidence = 0.4;
-    const stepScore = Math.min(stepCount * 0.1, 0.3);
-    const evidenceScore = Math.min(evidenceCount * 0.05, 0.2);
-    
-    return Math.min(baseConfidence + stepScore + evidenceScore + pyramidCompleteness, 1.0);
-  }
-
-  /**
-   * ロジカルシンキング思考の推論説明生成
-   */
-  protected override generateReasoningExplanation(
-    input: unknown, 
-    output: Record<string, unknown>, 
-    _context: AgentContext
-  ): string {
-    const typedInput = input as { question: string };
-    const typedOutput = output as LogicalOutput;
-    
-    return `「${typedInput.question}」という論点に対して、${typedOutput.reasoning.length}段階の論理展開を行いました。結論: ${typedOutput.conclusion}。論理構造はピラミッド形式で整理され、${typedOutput.pyramid.supports.length}個の主要な支点で結論を支えています。各ステップは根拠に基づいており、「Why So（なぜなら）」「So What（だから）」の論理的つながりを確保しています。`;
-  }
-
-  /**
-   * ロジカルシンキング思考後の次ステップ推奨
-   */
-  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
-    const baseRecommendations = super.getNextRecommendations(result, phase);
-    
-    // ロジカルシンキング後は前提の検証が重要
-    const logicalSpecific: ThinkingMethodType[] = ['critical'];
-    
-    // 分類や整理が必要な場合はMECE
-    if (phase === 'prioritization' || phase === 'requirement_definition') {
-      logicalSpecific.push('mece');
-    }
-    
-    // 計画段階ではメタ思考で手順の妥当性確認
-    if (phase === 'estimation_planning') {
-      logicalSpecific.push('meta');
-    }
-
-    return [...new Set([...logicalSpecific, ...baseRecommendations])];
-  }
-}
-
-/**
- * ロジカルシンキング思考用のプロンプトテンプレート
- */
-class LogicalThinkingPromptTemplate extends LLMPromptTemplate {
-  constructor(private agent: LogicalThinkingAgent) {
-    super();
-  }
-
-  protected getSystemPrompt(): string {
-    const schemaExample = this.agent.generateSchemaExample(LogicalOutput);
-    
-    return `あなたはロジカルシンキング（論理的思考）の専門家です。
+  const systemPrompt = `あなたはロジカルシンキングの専門家です。論点から結論への論理的道筋を構築してください。
 
 ロジカルシンキングの手順:
-1. 【論点の明確化】: 何について考えるのかを具体的に設定
-2. 【情報収集・整理】: 論点に関連する情報を体系的に整理
-3. 【解釈・推論】: 情報から何がいえるかを段階的に導出
-4. 【論理構造化】: 結論とそれを支える根拠をピラミッド構造で整理
+1. 論点を明確にする
+2. 関連する事実を整理する
+3. 論理的な分析を行う
+4. 含意を導出する
+5. 結論を構築する
 
-重要な原則:
-- 「Why So（なぜなら）」「So What（だから）」のつながりを明確化
-- MECE（漏れなく重複なく）の観点で情報を整理
-- 根拠と結論の論理的飛躍を避ける
-- 結論を頂点とした階層構造で全体を可視化
+重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-出力形式（JSON）:
 ${schemaExample}
 
-必ず上記のJSON形式で出力してください。`;
+注意事項:
+${schemaInstructions}
+
+ロジカルシンキングの本質である「論理的思考」を重視し、明確で一貫した結論構築を行ってください。`;
+
+  const userPrompt = `以下の質問について、ロジカルシンキングにより論理的な結論を構築してください。
+
+質問:
+${input.question}
+
+${input.context ? `コンテキスト: ${input.context}` : ''}
+${(input.constraints && input.constraints.length > 0) ? `制約:\n${input.constraints.map((c, i) => `${i + 1}. ${c}`).join('\n')}` : ''}
+${input.domain ? `ドメイン: ${input.domain}` : ''}
+
+上記の質問について論点を明確にし、事実を整理し、論理的な分析を行って結論を構築してください。`;
+
+  return E.right({ system: systemPrompt, user: userPrompt });
+};
+
+// 信頼度計算関数
+const calculateLogicalConfidence: ConfidenceCalculator<LogicalOutput> = (output, _context) => {
+  // ロジカルシンキングの信頼度は論理構造の完全性と一貫性に基づく
+  const reasoningSteps = output.reasoning.length;
+  const evidenceCount = output.reasoning.reduce((sum, step) => sum + step.evidence.length, 0);
+  const pyramidSupports = output.pyramid.supports.length;
+  
+  const baseConfidence = output.confidence;
+  const stepsBonus = Math.min(reasoningSteps * 0.05, 0.2);
+  const evidenceBonus = Math.min(evidenceCount * 0.02, 0.2);
+  const pyramidBonus = Math.min(pyramidSupports * 0.05, 0.1);
+  
+  return Math.min(baseConfidence + stepsBonus + evidenceBonus + pyramidBonus, 1.0);
+};
+
+// 推論説明生成関数
+const generateLogicalReasoning: ReasoningGenerator<LogicalInput, LogicalOutput> = (input, output, _context) => {
+  const evidenceCount = output.reasoning.reduce((sum, step) => sum + step.evidence.length, 0);
+  return `「${input.question}」という質問について、${output.reasoning.length}個の推論ステップを経て「${output.conclusion}」という結論を構築しました。ピラミッド構造では${output.pyramid.supports.length}個の支持主張を整理し、合計${evidenceCount}個の根拠を収集しました（信頼度: ${(output.confidence * 100).toFixed(1)}%）`;
+};
+
+// 次ステップ推奨関数
+const recommendLogicalNextSteps: NextStepRecommender = (_result, phase) => {
+  const baseRecommendations: ThinkingMethodType[] = ['critical', 'mece'];
+  
+  // 要件定義ではPAC思考も有効
+  if (phase === 'requirement_definition') {
+    baseRecommendations.push('pac');
+  }
+  
+  // 見積もりでは演繹的思考とメタ思考も重要
+  if (phase === 'estimation_planning') {
+    baseRecommendations.push('deductive', 'meta');
+  }
+  
+  // ふりかえりではPAC思考も重要
+  if (phase === 'retrospective') {
+    baseRecommendations.push('pac');
   }
 
-  protected getUserPrompt(input: unknown): string {
-    const { question, information, constraints } = input as { 
-      question: string; 
-      information?: string[]; 
-      constraints?: string[] 
-    };
+  return baseRecommendations;
+};
 
-    return `以下の論点について、ロジカルシンキングを適用して分析してください。
-
-## 論点
-${question}
-
-${information && information.length > 0 ? `## 既知の情報\n${information.map(info => `- ${info}`).join('\n')}\n` : ''}
-${constraints && constraints.length > 0 ? `## 制約条件\n${constraints.map(constraint => `- ${constraint}`).join('\n')}\n` : ''}
-
-## 求める分析
-
-1. **段階的推論プロセス**
-   - 各ステップでの論理展開
-   - ステップごとの根拠と推論
-   - 「Why So」「So What」の連鎖
-
-2. **論理構造（ピラミッド）**
-   - 結論を頂点とした階層構造
-   - 結論を支える主要な支点
-   - 各支点の根拠
-
-3. **最終結論**
-   - 論点に対する明確な回答
-   - 結論に至る論理的道筋の要約
-
-論理の一貫性と根拠の妥当性を重視し、読み手が納得できる構造化された思考プロセスを提示してください。`;
-  }
-}
+// 関数型エージェントの定義
+export const logicalAgent: FunctionalAgent<LogicalInput, LogicalOutput> = {
+  capability: logicalCapability,
+  config: logicalConfig,
+  generatePrompts: generateLogicalPrompts,
+  calculateConfidence: calculateLogicalConfidence,
+  generateReasoning: generateLogicalReasoning,
+  recommendNextSteps: recommendLogicalNextSteps,
+};

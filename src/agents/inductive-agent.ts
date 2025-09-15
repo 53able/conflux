@@ -1,179 +1,181 @@
-import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
+import { 
+  type AgentCapability,
+  type FunctionalAgent,
+  type AgentConfig,
+  type PromptGenerator,
+  type ConfidenceCalculator,
+  type ReasoningGenerator,
+  type NextStepRecommender,
+} from '../core/agent-base.js';
 import { 
   ThinkingMethodType, 
-  InductiveInput, 
-  InductiveOutput,
   DevelopmentPhase, 
-  ThinkingResult
-} from '../schemas/thinking.js';
+} from '../schemas/index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import { pipe } from 'fp-ts/lib/function.js';
+import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { type InductiveInput, type InductiveOutput, InductiveInputSchema, InductiveOutputSchema } from '../schemas/index.js';
 
-export class InductiveThinkingAgent extends BaseThinkingAgent {
-  readonly capability: AgentCapability = {
-    methodType: 'inductive' as ThinkingMethodType,
-    description: '個別事例から共通パターンを発見し一般論を構築する',
-    applicablePhases: [
-      'value_hypothesis',
-      'experimentation',
-      'debugging'
-    ] as DevelopmentPhase[],
-    requiredInputSchema: InductiveInput,
-    outputSchema: InductiveOutput,
-    combinationSynergies: ['critical', 'deductive', 'abduction'] as ThinkingMethodType[],
-  };
+/**
+ * 帰納的思考エージェント（関数型スタイル）
+ * 
+ * 機能:
+ * 1. 個別事例を収集・分析する
+ * 2. 共通パターンを発見する
+ * 3. 一般論・仮説を構築する
+ * 
+ * 適用場面:
+ * - 価値仮説の検証
+ * - 実験・テスト結果の分析
+ * - デバッグ・障害分析
+ */
 
-  protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const promptTemplate = new InductivePromptTemplate(this);
-    const { system, user } = promptTemplate.generatePrompts(input);
+// ============================================================================
+// 関数型スタイルの帰納的思考エージェント
+// ============================================================================
 
-    // AI SDKのgenerateObjectを使用してスキーマ保証
-    const result = await this.callLLMWithStructuredOutput(
-      InductiveOutput,
-      system,
-      user,
-      context,
-      {
-        temperature: 0.3,
-        maxRetries: 3,
-        enableAutoRecovery: true,
-        schemaName: 'InductiveOutput',
-        schemaDescription: '帰納的思考の分析結果を表す構造化データ',
-        mode: 'json',
-      }
-    );
 
-    return result as Record<string, unknown>;
-  }
+// エージェント能力定義
+const inductiveCapability: AgentCapability = {
+  methodType: 'inductive' as ThinkingMethodType,
+  description: '個別事例から共通パターンを発見し一般論を構築する',
+  applicablePhases: [
+    'value_hypothesis',
+    'experimentation',
+    'debugging'
+  ] as DevelopmentPhase[],
+  requiredInputSchema: InductiveInputSchema,
+  outputSchema: InductiveOutputSchema,
+  combinationSynergies: ['critical', 'deductive', 'abduction', 'meta'],
+};
 
-  /**
-   * 帰納的思考特有の入力正規化
-   */
-  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
-    const normalized = { ...input };
+// エージェント設定
+const inductiveConfig: AgentConfig = {
+  temperature: 0.3,
+  maxRetries: 3,
+  enableAutoRecovery: true,
+  schemaName: 'InductiveOutput',
+  schemaDescription: '帰納的思考の分析結果を表す構造化データ',
+  mode: 'json'
+};
 
-    // 必須フィールドの正規化
-    if (!normalized.observations) {
-      // observationsが不足している場合、contentやtextから生成
-      const content = normalized.content || normalized.text || normalized.message || '';
-      normalized.observations = [content];
-    } else if (typeof normalized.observations === 'string') {
-      normalized.observations = [normalized.observations];
-    }
+// プロンプト生成関数
+const generateInductivePrompts: PromptGenerator<InductiveInput> = (input, capability) => {
+  // スキーマから動的にJSON例と注意事項を生成
+  const schemaExample = generateSchemaExample(capability.outputSchema);
+  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
 
-    // contextの正規化
-    if (!normalized.context) {
-      normalized.context = '';
-    }
-
-    return normalized;
-  }
-
-  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
-    const inductiveOutput = output as InductiveOutput;
-    
-    // サンプルサイズと信頼度の平均から算出
-    const avgConfidence = inductiveOutput.generalizations.reduce((sum, g) => sum + g.confidence, 0) / inductiveOutput.generalizations.length;
-    const sampleSizeBonus = Math.min(inductiveOutput.sampleSize * 0.02, 0.3);
-    
-    return Math.min(avgConfidence + sampleSizeBonus, 1.0);
-  }
-
-  /**
-   * 帰納的思考の推論説明生成
-   */
-  protected override generateReasoningExplanation(
-    input: unknown, 
-    output: Record<string, unknown>, 
-    _context: AgentContext
-  ): string {
-    const typedInput = input as { observations: string[] };
-    const typedOutput = output as InductiveOutput;
-    
-    const topGeneralization = typedOutput.generalizations.reduce((best, current) => 
-      current.confidence > best.confidence ? current : best
-    );
-    
-    return `「${typedInput.observations.length}個の観察データ」から帰納的に分析し、${typedOutput.generalizations.length}個の一般化を発見しました。最も信頼度の高い一般化は「${topGeneralization.pattern}」（信頼度: ${(topGeneralization.confidence * 100).toFixed(1)}%）です。サンプルサイズ: ${typedOutput.sampleSize}、バイアス警告: ${typedOutput.biasWarnings?.length || 0}個を特定しています。`;
-  }
-
-  /**
-   * 帰納的思考後の次ステップ推奨
-   */
-  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
-    const baseRecommendations = super.getNextRecommendations(result, phase);
-    
-    // 帰納思考後は仮説の検証が重要
-    const inductiveSpecific: ThinkingMethodType[] = ['deductive', 'critical'];
-    
-    // 価値仮説の検証にはアブダクションも有効
-    if (phase === 'value_hypothesis') {
-      inductiveSpecific.push('abduction');
-    }
-    
-    // 実験段階ではメタ思考でプロセス改善
-    if (phase === 'experimentation') {
-      inductiveSpecific.push('meta');
-    }
-
-    return [...new Set([...inductiveSpecific, ...baseRecommendations])];
-  }
-}
-
-class InductivePromptTemplate extends LLMPromptTemplate {
-  constructor(private agent: InductiveThinkingAgent) {
-    super();
-  }
-
-  protected getSystemPrompt(): string {
-    const schemaExample = this.agent.generateSchemaExample(InductiveOutput);
-    
-    return `あなたは帰納的思考の専門家です。観察データを分析してパターンと一般化を発見してください。
+  const systemPrompt = `あなたは帰納的思考の専門家です。観察データを分析してパターンと一般化を発見してください。
 
 帰納的思考の手順:
 1. 観察データから共通パターンを探す
 2. パターンに基づいて一般化を構築する
-3. 各一般化の信頼度を評価する
-4. 例外やバイアスを特定する
+3. 仮説を形成する
+4. 信頼度を評価する
 
-重要な原則:
-- 個別事例から共通パターンを発見し、一般論を構築する
-- サンプルサイズと代表性を考慮する
-- バイアスや制限事項を認識する
-- 信頼度を0-1の数値で表現する
-- 例外となる観察データも明記する
+重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-出力形式（JSON）:
 ${schemaExample}
 
-必ず上記のJSON形式で出力してください。`;
-  }
-
-  protected getUserPrompt(input: unknown): string {
-    const { observations, context } = input as { observations: string[]; context?: string };
-
-    return `以下の観察データを分析して、パターンと一般化を発見してください。
-
-## 観察データ
-${observations.map((obs, i) => `${i + 1}. ${obs}`).join('\n')}
-
-${context ? `## コンテキスト\n${context}\n` : ''}
-
-## 求める分析
-
-1. **一般化の発見**
-   - 観察データから共通する特徴や傾向を特定
-   - 一般化の強度と一貫性を評価
-
-2. **一般化の構築**
-   - 発見したパターンから一般論を導出
-   - 各一般化の信頼度を0-1の数値で表現
-   - 支持する根拠となる観察データを明示
-   - 例外となる観察データも特定
-
-3. **バイアスの認識**
-   - サンプルサイズの適切性
-   - 潜在的なバイアスや制限
-   - 一般化の限界を明記
+注意事項:
+${schemaInstructions}
 
 帰納的思考の本質である「個別から一般へ」の推論を重視し、慎重かつ論理的な分析を行ってください。`;
+
+  const userPrompt = `観察データを分析してパターンと一般化を発見してください。
+
+観察データ:
+${(input.observations || []).map((obs, i) => `${i + 1}. ${obs}`).join('\n')}
+
+${input.context ? `コンテキスト: ${input.context}` : ''}
+${input.domain ? `ドメイン: ${input.domain}` : ''}
+
+上記の観察データから共通パターンを発見し、一般化と仮説を構築してください。`;
+
+  return E.right({ system: systemPrompt, user: userPrompt });
+};
+
+// 信頼度計算関数
+const calculateInductiveConfidence: ConfidenceCalculator<InductiveOutput> = (output, _context) => {
+  return pipe(
+    output,
+    calculateAverageConfidence,
+    applySampleSizeBonus,
+    normalizeConfidence
+  );
+};
+
+// 平均信頼度を計算
+const calculateAverageConfidence = (inductiveOutput: InductiveOutput): { inductiveOutput: InductiveOutput; avgConfidence: number } => {
+  const patterns = inductiveOutput.generalizations || [];
+  const avgConfidence = patterns.length > 0 
+    ? patterns.reduce((sum: number, pattern: Record<string, unknown>) => sum + ((pattern.confidence as number) || 0), 0) / patterns.length
+    : 0;
+  return {
+    inductiveOutput,
+    avgConfidence
+  };
+};
+
+// サンプルサイズボーナスを適用
+const applySampleSizeBonus = (data: { inductiveOutput: InductiveOutput; avgConfidence: number }): { inductiveOutput: InductiveOutput; avgConfidence: number; sampleSizeBonus: number } => {
+  const patternsLength = (data.inductiveOutput.generalizations || []).length;
+  const sampleSizeBonus = Math.min(patternsLength * 0.02, 0.3);
+  return {
+    ...data,
+    sampleSizeBonus
+  };
+};
+
+// 信頼度を正規化
+const normalizeConfidence = (data: { inductiveOutput: InductiveOutput; avgConfidence: number; sampleSizeBonus: number }): number => {
+  return Math.min(data.avgConfidence + data.sampleSizeBonus, 1.0);
+};
+
+// 推論説明生成関数
+const generateInductiveReasoning: ReasoningGenerator<InductiveInput, InductiveOutput> = (input, output, _context) => {
+  const generalizations = output.generalizations || [];
+  const observations = input.observations || [];
+  
+  if (generalizations.length === 0) {
+    return `「${observations.length}個の観察データ」から帰納的に分析しましたが、明確なパターンを発見できませんでした。`;
   }
-}
+  
+  const topGeneralization = generalizations.reduce((best, current) => 
+    (current.confidence || 0) > (best.confidence || 0) ? current : best
+  );
+  
+  return `「${observations.length}個の観察データ」から帰納的に分析し、${generalizations.length}個の一般化を発見しました。最も信頼度の高いパターンは「${topGeneralization.pattern || '未定義'}」（信頼度: ${((topGeneralization.confidence || 0) * 100).toFixed(1)}%）です。サンプルサイズ: ${output.sampleSize}、バイアス警告: ${(output.biasWarnings || []).length}個。`;
+};
+
+// 次ステップ推奨関数
+const recommendInductiveNextSteps: NextStepRecommender = (_result, phase) => {
+  const baseRecommendations: ThinkingMethodType[] = ['critical', 'deductive'];
+  
+  // 価値仮説の検証にはアブダクションも有効
+  if (phase === 'value_hypothesis') {
+    baseRecommendations.push('abduction');
+  }
+  
+  // 実験段階ではメタ思考でプロセス改善
+  if (phase === 'experimentation') {
+    baseRecommendations.push('meta');
+  }
+  
+  // デバッグではアブダクションも重要
+  if (phase === 'debugging') {
+    baseRecommendations.push('abduction');
+  }
+
+  return baseRecommendations;
+};
+
+// 関数型エージェントの定義
+export const inductiveAgent: FunctionalAgent<InductiveInput, InductiveOutput> = {
+  capability: inductiveCapability,
+  config: inductiveConfig,
+  generatePrompts: generateInductivePrompts,
+  calculateConfidence: calculateInductiveConfidence,
+  generateReasoning: generateInductiveReasoning,
+  recommendNextSteps: recommendInductiveNextSteps,
+};

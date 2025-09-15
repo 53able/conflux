@@ -1,158 +1,145 @@
-import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
+import { 
+  type AgentCapability,
+  type FunctionalAgent,
+  type AgentConfig,
+  type PromptGenerator,
+  type ConfidenceCalculator,
+  type ReasoningGenerator,
+  type NextStepRecommender,
+} from '../core/index.js';
 import { 
   ThinkingMethodType, 
-  PACInput, 
-  PACOutput,
   DevelopmentPhase, 
-  ThinkingResult
-} from '../schemas/thinking.js';
+} from '../schemas/index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { type PACInput, type PACOutput, PACInputSchema, PACOutputSchema } from '../schemas/index.js';
 
-export class PACThinkingAgent extends BaseThinkingAgent {
-  readonly capability: AgentCapability = {
-    methodType: 'pac' as ThinkingMethodType,
-    description: '仮説を前提・仮定・結論に分解し、仮定と前提の妥当性を検証する',
-    applicablePhases: [
-      'hypothesis_breakdown',
-      'retrospective'
-    ] as DevelopmentPhase[],
-    requiredInputSchema: PACInput,
-    outputSchema: PACOutput,
-    combinationSynergies: ['critical', 'logical'] as ThinkingMethodType[],
-  };
+/**
+ * PAC思考エージェント（関数型スタイル）
+ * 
+ * 機能:
+ * 1. 仮説を前提・仮定・結論に分解する
+ * 2. 仮定と前提の妥当性を検証する
+ * 3. 検証可能な方法を提示する
+ * 
+ * 適用場面:
+ * - 仮説分解
+ * - ふりかえり
+ */
 
-  protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const promptTemplate = new PACPromptTemplate(this);
-    const { system, user } = promptTemplate.generatePrompts(input);
+// ============================================================================
+// 関数型スタイルのPAC思考エージェント
+// ============================================================================
 
-    // AI SDKのgenerateObjectを使用してスキーマ保証
-    const result = await this.callLLMWithStructuredOutput(
-      PACOutput,
-      system,
-      user,
-      context,
-      {
-        temperature: 0.2,
-        maxRetries: 3,
-        enableAutoRecovery: true,
-        schemaName: 'PACOutput',
-        schemaDescription: 'PAC思考の分析結果を表す構造化データ',
-        mode: 'json',
-      }
-    );
 
-    return result as Record<string, unknown>;
-  }
+// エージェント能力定義
+const pacCapability: AgentCapability = {
+  methodType: 'pac' as ThinkingMethodType,
+  description: '仮説を前提・仮定・結論に分解し検証する',
+  applicablePhases: [ 
+    'hypothesis_breakdown',
+    'retrospective'
+  ] as DevelopmentPhase[],
+  requiredInputSchema: PACInputSchema,
+  outputSchema: PACOutputSchema,
+  combinationSynergies: ['critical', 'deductive', 'meta', 'logical'],
+};
 
-  /**
-   * PAC思考特有の入力正規化
-   */
-  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
-    const normalized = { ...input };
+// エージェント設定
+const pacConfig: AgentConfig = {
+  temperature: 0.2,
+  maxRetries: 3,
+  enableAutoRecovery: true,
+  schemaName: 'PACOutput',
+  schemaDescription: 'PAC思考の分析結果を表す構造化データ',
+  mode: 'json'
+};
 
-    // 必須フィールドの正規化
-    if (!normalized.claim) {
-      // claimが不足している場合、contentやtextから生成
-      const content = normalized.content || normalized.text || normalized.message || '';
-      normalized.claim = content;
-    }
+// プロンプト生成関数
+const generatePACPrompts: PromptGenerator<PACInput> = (input, capability) => {
+  // スキーマから動的にJSON例と注意事項を生成
+  const schemaExample = generateSchemaExample(capability.outputSchema);
+  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
 
-    // contextの正規化
-    if (!normalized.context) {
-      normalized.context = '';
-    }
+  const systemPrompt = `あなたはPAC思考の専門家です。仮説を前提・仮定・結論に分解し、検証可能な方法を提示してください。
 
-    return normalized;
-  }
+PAC思考の手順:
+1. 主張を前提・仮定・結論に分解する
+2. 前提の妥当性を検証する
+3. 仮定の妥当性を検証する
+4. 論理の妥当性を検証する
+5. 検証可能な方法を提示する
 
-  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
-    const pacOutput = output as PACOutput;
-    
-    const assumptionValidityScore = pacOutput.assumptions_validity.isValid ? 0.4 : 0.1;
-    const premiseReliabilityScore = pacOutput.premise_validity.isReliable ? 0.4 : 0.1;
-    const testMethodScore = Math.min(pacOutput.assumptions_validity.testMethods.length * 0.05, 0.2);
-    
-    return Math.min(assumptionValidityScore + premiseReliabilityScore + testMethodScore, 1.0);
-  }
+重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-  /**
-   * PAC思考の推論説明生成
-   */
-  protected override generateReasoningExplanation(
-    input: unknown, 
-    output: Record<string, unknown>, 
-    _context: AgentContext
-  ): string {
-    const typedInput = input as { claim: string };
-    const typedOutput = output as PACOutput;
-    
-    const assumptionValidity = typedOutput.assumptions_validity.isValid ? '有効' : '無効';
-    const premiseReliability = typedOutput.premise_validity.isReliable ? '信頼できる' : '要検証';
-    
-    return `「${typedInput.claim}」をPAC構造に分解し、前提・仮定・結論の妥当性を検証しました。前提: ${premiseReliability}、仮定: ${assumptionValidity}。検証方法${typedOutput.assumptions_validity.testMethods.length}個を提示し、仮説の構造的妥当性を体系的に評価しています。`;
-  }
-
-  /**
-   * PAC思考後の次ステップ推奨
-   */
-  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
-    const baseRecommendations = super.getNextRecommendations(result, phase);
-    
-    // PAC思考後は検証の実行が重要
-    const pacSpecific: ThinkingMethodType[] = ['critical'];
-    
-    // 仮説の検証には演繹的思考も有効
-    if (phase === 'hypothesis_breakdown') {
-      pacSpecific.push('deductive');
-    }
-    
-    // 振り返りでは論理的構造化も重要
-    if (phase === 'retrospective') {
-      pacSpecific.push('logical');
-    }
-
-    return [...new Set([...pacSpecific, ...baseRecommendations])];
-  }
-}
-
-class PACPromptTemplate extends LLMPromptTemplate {
-  constructor(private agent: PACThinkingAgent) {
-    super();
-  }
-
-  protected getSystemPrompt(): string {
-    const schemaExample = this.agent.generateSchemaExample(PACOutput);
-    
-    return `あなたはPAC思考の専門家です。
-
-PAC思考の構造:
-- P (Premise): 事実・制約として確認できる前提
-- A (Assumption): 前提と結論をつなぐ暗黙の仮定  
-- C (Conclusion): 主張・結論
-
-分析の重点:
-1. 仮定(A)の妥当性検証 - 時代変化で無効になっていないか
-2. 前提(P)の信頼性検証 - 個人の解釈で美化されていないか
-3. 検証方法の提示 - 仮定を実験で壊せる形に
-
-出力形式（JSON）:
 ${schemaExample}
 
-必ず上記のJSON形式で出力してください。`;
+注意事項:
+${schemaInstructions}
+
+PAC思考の本質である「前提・仮定・結論」の明確な分離と検証可能性を重視してください。`;
+
+  const userPrompt = `以下の主張をPAC思考により分解・検証してください。
+
+主張:
+${input.claim}
+
+${input.context ? `コンテキスト: ${input.context}` : ''}
+${input.domain ? `ドメイン: ${input.domain}` : ''}
+
+上記の主張を前提・仮定・結論に分解し、各要素の妥当性を検証し、検証可能な方法を提示してください。`;
+
+  return E.right({ system: systemPrompt, user: userPrompt });
+};
+
+// 信頼度計算関数
+const calculatePACConfidence: ConfidenceCalculator<PACOutput> = (output, _context) => {
+  // PAC思考の信頼度は分解の明確さと検証可能性に基づく
+  const assumptionValidity = output.assumptions_validity.isValid ? 1 : 0;
+  const premiseReliability = output.premise_validity.isReliable ? 1 : 0;
+  const validationScore = (assumptionValidity + premiseReliability) / 2;
+  
+  const testMethodsBonus = Math.min(output.assumptions_validity.testMethods.length * 0.1, 0.2);
+  const concernsBonus = Math.min(output.assumptions_validity.concerns.length * 0.05, 0.1);
+  const baseConfidence = output.confidence;
+  
+  return Math.min(baseConfidence * validationScore + testMethodsBonus + concernsBonus, 1.0);
+};
+
+// 推論説明生成関数
+const generatePACReasoning: ReasoningGenerator<PACInput, PACOutput> = (input, output, _context) => {
+  return `「${input.claim}」をPAC思考により分解し、前提: ${output.premise}、仮定: ${output.assumption}、結論: ${output.conclusion}に分離しました。仮定の妥当性: ${output.assumptions_validity.isValid ? '妥当' : '不適切'}、前提の信頼性: ${output.premise_validity.isReliable ? '信頼できる' : '信頼できない'}。${output.assumptions_validity.testMethods.length}個の検証方法を提示し、仮説の検証可能性を確保しました（信頼度: ${(output.confidence * 100).toFixed(1)}%）`;
+};
+
+// 次ステップ推奨関数
+const recommendPACNextSteps: NextStepRecommender = (_result, phase) => {
+  const baseRecommendations: ThinkingMethodType[] = ['critical', 'deductive'];
+  
+  // 仮説分解では批判的思考も有効
+  if (phase === 'hypothesis_breakdown') {
+    baseRecommendations.push('critical');
+  }
+  
+  // ふりかえりではメタ思考とロジカル思考も重要
+  if (phase === 'retrospective') {
+    baseRecommendations.push('meta', 'logical');
+  }
+  
+  // 価値仮説では帰納的思考も有効
+  if (phase === 'value_hypothesis') {
+    baseRecommendations.push('inductive');
   }
 
-  protected getUserPrompt(input: unknown): string {
-    const { claim, context } = input as { claim: string; context?: string };
+  return baseRecommendations;
+};
 
-    return `以下の主張をPACに分解し、仮定と前提の妥当性を検証してください。
-
-## 主張・結論
-${claim}
-
-${context ? `## コンテキスト\n${context}\n` : ''}
-
-## 求めるPAC分析
-1. **PAC分解**: 前提・仮定・結論の明確化
-2. **仮定の検証**: 現在も有効か、検証方法は何か
-3. **前提の検証**: 客観的事実か、バイアスはないか`;
-  }
-}
+// 関数型エージェントの定義
+export const pacAgent: FunctionalAgent<PACInput, PACOutput> = {
+  capability: pacCapability,
+  config: pacConfig,
+  generatePrompts: generatePACPrompts,
+  calculateConfidence: calculatePACConfidence,
+  generateReasoning: generatePACReasoning,
+  recommendNextSteps: recommendPACNextSteps,
+};

@@ -1,161 +1,149 @@
-import { BaseThinkingAgent, LLMPromptTemplate, type AgentContext, type AgentCapability } from '../core/agent-base.js';
+import { 
+  type AgentCapability,
+  type FunctionalAgent,
+  type AgentConfig,
+  type PromptGenerator,
+  type ConfidenceCalculator,
+  type ReasoningGenerator,
+  type NextStepRecommender,
+} from '../core/index.js';
 import { 
   ThinkingMethodType, 
-  MetaInput, 
-  MetaOutput,
   DevelopmentPhase, 
-  ThinkingResult
-} from '../schemas/thinking.js';
+} from '../schemas/index.js';
+import * as E from 'fp-ts/lib/Either.js';
+import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { type MetaInput, type MetaOutput, MetaInputSchema, MetaOutputSchema } from '../schemas/index.js';
 
-export class MetaThinkingAgent extends BaseThinkingAgent {
-  readonly capability: AgentCapability = {
-    methodType: 'meta' as ThinkingMethodType,
-    description: '思考プロセス自体を対象化し、より高次の視点から評価・改善する',
-    applicablePhases: [
-      'retrospective',
-      'estimation_planning',
-      'decision_making'
-    ] as DevelopmentPhase[],
-    requiredInputSchema: MetaInput,
-    outputSchema: MetaOutput,
-    combinationSynergies: ['logical', 'critical'] as ThinkingMethodType[],
-  };
+/**
+ * メタ思考エージェント（関数型スタイル）
+ * 
+ * 機能:
+ * 1. 思考プロセス自体を対象化する
+ * 2. より高次の視点から評価・改善する
+ * 3. 思考の思考による質的向上
+ * 
+ * 適用場面:
+ * - ふりかえり/改善
+ * - 見積もり/計画
+ * - 意思決定
+ */
 
-  protected async executeLLMThinking(input: unknown, context: AgentContext): Promise<Record<string, unknown>> {
-    const promptTemplate = new MetaPromptTemplate(this);
-    const { system, user } = promptTemplate.generatePrompts(input);
+// ============================================================================
+// 関数型スタイルのメタ思考エージェント
+// ============================================================================
 
-    // AI SDKのgenerateObjectを使用してスキーマ保証
-    const result = await this.callLLMWithStructuredOutput(
-      MetaOutput,
-      system,
-      user,
-      context,
-      {
-        temperature: 0.4,
-        maxRetries: 3,
-        enableAutoRecovery: true,
-        schemaName: 'MetaOutput',
-        schemaDescription: 'メタ思考の分析結果を表す構造化データ',
-        mode: 'json',
-      }
-    );
 
-    return result as Record<string, unknown>;
-  }
+// エージェント能力定義
+const metaCapability: AgentCapability = {
+  methodType: 'meta' as ThinkingMethodType,
+  description: '思考プロセス自体を対象化し高次の視点から評価・改善する',
+  applicablePhases: [
+    'retrospective',
+    'estimation_planning',
+    'decision_making'
+  ] as DevelopmentPhase[],
+  requiredInputSchema: MetaInputSchema,
+  outputSchema: MetaOutputSchema,
+  combinationSynergies: ['critical', 'logical', 'debate'] as ThinkingMethodType[],
+};
 
-  /**
-   * メタ思考特有の入力正規化
-   */
-  protected override performSchemaSpecificNormalization(input: Record<string, unknown>): Record<string, unknown> {
-    const normalized = { ...input };
+// エージェント設定
+const metaConfig: AgentConfig = {
+  temperature: 0.5,
+  maxRetries: 3,
+  enableAutoRecovery: true,
+  schemaName: 'MetaOutput',
+  schemaDescription: 'メタ思考の分析結果を表す構造化データ',
+  mode: 'json'
+};
 
-    // 必須フィールドの正規化
-    if (!normalized.currentThinking) {
-      // currentThinkingが不足している場合、contentやtextから生成
-      const content = normalized.content || normalized.text || normalized.message || '';
-      normalized.currentThinking = content;
-    }
+// プロンプト生成関数
+const generateMetaPrompts: PromptGenerator<MetaInput> = (input, capability) => {
+  // スキーマから動的にJSON例と注意事項を生成
+  const schemaExample = generateSchemaExample(capability.outputSchema);
+  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
 
-    if (!normalized.objective) {
-      // objectiveが不足している場合、デフォルト値を設定
-      normalized.objective = '思考プロセスの改善';
-    }
+  const systemPrompt = `あなたはメタ思考の専門家です。思考プロセス自体を対象化し、より高次の視点から評価・改善してください。
 
-    return normalized;
-  }
+メタ思考の手順:
+1. 現在の思考プロセスを客観視する
+2. 思考の強みと弱みを分析する
+3. 改善点を特定する
+4. 高次の洞察を得る
+5. 具体的な推奨事項を提示する
 
-  protected override calculateConfidence(output: Record<string, unknown>, _context: AgentContext): number {
-    const metaOutput = output as MetaOutput;
-    
-    const processEffectiveness = metaOutput.processEvaluation.effectiveness;
-    const recommendationScore = Math.min(metaOutput.recommendations.length * 0.1, 0.3);
-    const alternativeScore = Math.min(metaOutput.alternativeApproaches.length * 0.05, 0.2);
-    
-    return Math.min(processEffectiveness * 0.5 + recommendationScore + alternativeScore, 1.0);
-  }
+重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-  /**
-   * メタ思考の推論説明生成
-   */
-  protected override generateReasoningExplanation(
-    input: unknown, 
-    output: Record<string, unknown>, 
-    _context: AgentContext
-  ): string {
-    const typedInput = input as { currentThinking: string; objective: string };
-    const typedOutput = output as MetaOutput;
-    
-    const effectivenessPercent = (typedOutput.processEvaluation.effectiveness * 100).toFixed(1);
-    
-    return `「${typedInput.objective}」を目的として、現在の思考プロセス「${typedInput.currentThinking}」をメタレベルで分析しました。プロセス有効性: ${effectivenessPercent}%、改善提案${typedOutput.recommendations.length}個、代替アプローチ${typedOutput.alternativeApproaches.length}個を生成。思考プロセス自体を対象化し、より高次の視点から評価・改善を行いました。`;
-  }
-
-  /**
-   * メタ思考後の次ステップ推奨
-   */
-  override getNextRecommendations(result: ThinkingResult, phase: DevelopmentPhase): ThinkingMethodType[] {
-    const baseRecommendations = super.getNextRecommendations(result, phase);
-    
-    // メタ思考後は具体的な実装が重要
-    const metaSpecific: ThinkingMethodType[] = ['logical'];
-    
-    // 改善提案の実装にはクリティカル思考も有効
-    if (phase === 'retrospective' || phase === 'estimation_planning') {
-      metaSpecific.push('critical');
-    }
-    
-    // 意思決定段階ではディベート思考も有効
-    if (phase === 'decision_making') {
-      metaSpecific.push('debate');
-    }
-
-    return [...new Set([...metaSpecific, ...baseRecommendations])];
-  }
-}
-
-class MetaPromptTemplate extends LLMPromptTemplate {
-  constructor(private agent: MetaThinkingAgent) {
-    super();
-  }
-
-  protected getSystemPrompt(): string {
-    const schemaExample = this.agent.generateSchemaExample(MetaOutput);
-    
-    return `あなたはメタ思考の専門家です。
-
-メタ思考の階層:
-- 対象レベル: 具体的な行動・計画・目標設定・事実
-- メタレベル: 上位概念・評価基準・思考プロセス・意味
-
-分析観点:
-1. 現在のプロセスの妥当性評価
-2. より効果的なアプローチの提案
-3. 思考の思考による質的向上
-4. 評価基準・成功指標の再定義
-
-出力形式（JSON）:
 ${schemaExample}
 
-必ず上記のJSON形式で出力してください。`;
+注意事項:
+${schemaInstructions}
+
+メタ思考の本質である「思考の思考」を重視し、客観的で建設的な改善提案を行ってください。`;
+
+  const userPrompt = `以下の思考プロセスをメタ思考により評価・改善してください。
+
+現在の思考内容:
+${input.currentThinking}
+
+目標:
+${input.objective}
+
+${input.context ? `コンテキスト: ${input.context}` : ''}
+
+上記の思考プロセスを客観的に評価し、改善点と高次の洞察を提示してください。`;
+
+  return E.right({ system: systemPrompt, user: userPrompt });
+};
+
+// 信頼度計算関数
+const calculateMetaConfidence: ConfidenceCalculator<MetaOutput> = (output, _context) => {
+  // メタ思考の信頼度は分析の深さと洞察の質に基づく
+  const processEvaluationQuality = (
+    output.processEvaluation.currentProcess.length +
+    output.processEvaluation.gaps.length
+  ) / 2;
+  
+  const recommendationsQuality = output.recommendations.length;
+  const alternativeApproachesQuality = output.alternativeApproaches.length;
+  
+  const baseConfidence = output.confidence;
+  const evaluationBonus = Math.min(processEvaluationQuality * 0.1, 0.2);
+  const recommendationsBonus = Math.min(recommendationsQuality * 0.05, 0.1);
+  const alternativesBonus = Math.min(alternativeApproachesQuality * 0.05, 0.1);
+  
+  return Math.min(baseConfidence + evaluationBonus + recommendationsBonus + alternativesBonus, 1.0);
+};
+
+// 推論説明生成関数
+const generateMetaReasoning: ReasoningGenerator<MetaInput, MetaOutput> = (input, output, _context) => {
+  return `「${input.currentThinking}」という思考プロセスをメタ思考により評価し、プロセスの有効性: ${(output.processEvaluation.effectiveness * 100).toFixed(1)}%、${output.processEvaluation.gaps.length}個のギャップを特定しました。${output.recommendations.length}個の改善推奨事項と${output.alternativeApproaches.length}個の代替アプローチを提示し、思考の質的向上を支援します（信頼度: ${(output.confidence * 100).toFixed(1)}%）`;
+};
+
+// 次ステップ推奨関数
+const recommendMetaNextSteps: NextStepRecommender = (_result, phase) => {
+  const baseRecommendations: ThinkingMethodType[] = ['critical', 'logical'];
+  
+  // ふりかえりでは批判的思考も有効
+  if (phase === 'retrospective') {
+    baseRecommendations.push('critical');
+  }
+  
+  // 意思決定ではディベート思考も重要
+  if (phase === 'decision_making') {
+    baseRecommendations.push('debate');
   }
 
-  protected getUserPrompt(input: unknown): string {
-    const { currentThinking, objective } = input as { currentThinking: string; objective: string };
+  return baseRecommendations;
+};
 
-    return `以下の思考内容をメタレベルで分析してください。
-
-## 現在の思考内容
-${currentThinking}
-
-## 目的・目標
-${objective}
-
-## 求めるメタ分析
-1. **プロセス評価**: 現在の思考プロセスの有効性
-2. **改善提案**: より良いアプローチの提示
-3. **代替手法**: 異なる観点からのアプローチ
-
-思考そのものを対象化し、一段高い視点から建設的な改善策を提示してください。`;
-  }
-}
+// 関数型エージェントの定義
+export const metaAgent: FunctionalAgent<MetaInput, MetaOutput> = {
+  capability: metaCapability,
+  config: metaConfig,
+  generatePrompts: generateMetaPrompts,
+  calculateConfidence: calculateMetaConfidence,
+  generateReasoning: generateMetaReasoning,
+  recommendNextSteps: recommendMetaNextSteps,
+};
