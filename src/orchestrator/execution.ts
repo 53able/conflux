@@ -216,7 +216,7 @@ const executeMethodsInParallel = (
  * 結果の統計情報を計算
  */
 const calculateResultStats = (results: ThinkingResult[]) => {
-  const successCount = results.length;
+  const successCount = results.filter(r => r.status === 'completed').length;
   const failedCount = results.filter(r => r.status === 'failed').length;
   const avgConfidence = results.reduce((sum, r) => sum + r.confidence, 0) / results.length;
   
