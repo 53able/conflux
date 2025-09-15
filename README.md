@@ -19,9 +19,11 @@ Confluxは9つの構造化された思考法（アブダクション、ロジカ
 - **型安全**: Zodスキーマベースの完全な型安全性（any型完全禁止）
 - **MCP準拠**: Model Context Protocolで他のAIツールと統合可能
 - **マルチエージェント**: 9つの専門思考法エージェントが連携して動作
+- **関数型スタイル**: 純粋関数ベースのエージェント実装
 
 **使用方法**
-- **ライブラリ**: `import { ThinkingOrchestrator } from '@53able/conflux'`
+- **関数型エージェント**: `import { FUNCTIONAL_AGENTS, executeFunctionalAgent } from '@53able/conflux'`
+- **局面別処理**: `import { processPhase, processGoldenPattern } from '@53able/conflux'`
 - **CLI**: `npx @53able/conflux [command]`
 - **MCPサーバー**: `npx @53able/conflux server`
 
@@ -29,6 +31,8 @@ Confluxは9つの構造化された思考法（アブダクション、ロジカ
 - 完全なドキュメント: [README.md](README.md)
 - アーキテクチャ: [docs/architecture.md](docs/architecture.md)
 - 思考法理論: [docs/思考法の使い方.md](docs/思考法の使い方.md)
+- 関数型エージェント: [docs/functional-agents-usage.md](docs/functional-agents-usage.md)
+- 使用例: [examples/functional-agents-example.ts](examples/functional-agents-example.ts)
 
 ## ✨ 特徴
 
@@ -36,6 +40,9 @@ Confluxは9つの構造化された思考法（アブダクション、ロジカ
 - **🎨 美しいCLI**: Commander.jsベースの直感的なコマンドライン
 - **🔗 LLM統合**: AI SDK v5で複数のLLMプロバイダーをサポート
 - **🛠 自動復旧**: スキーマ不一致やエラー時の自動復旧機能搭載
+- **🔧 自己修復**: 入力データの自動修復とスキーマ適合機能
+- **🔄 フォールバック**: 複数LLMプロバイダー間の自動切り替え
+- **📊 型安全**: Zodスキーマベースの完全な型安全性（any型完全禁止）
 - **🐳 Docker対応**: 本番環境向けのDockerコンテナ化とマルチステージビルド
 - **🏢 エンタープライズ対応**: Cursor、Claude Codeなどの開発環境で使用可能
 
@@ -80,7 +87,7 @@ npx @53able/conflux version
 npx @53able/conflux list
 
 # 2. API KEYを設定して思考分析を試す
-OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux single critical '{"claim": "この実装で十分"}'
+OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux method critical '{"claim": "この実装で十分"}'
 ```
 
 > **推奨**: このプロジェクトは`pnpm`での使用を推奨しています。
@@ -95,13 +102,13 @@ OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux single critical '{"clai
 
 ```bash
 # 一時的に環境変数を設定して実行
-OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux single critical '{"claim": "この実装で十分"}'
+OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux method critical '{"claim": "この実装で十分"}'
 
 # または Anthropic
-ANTHROPIC_API_KEY=sk-ant-your-key-here npx @53able/conflux single critical '{"claim": "この実装で十分"}'
+ANTHROPIC_API_KEY=sk-ant-your-key-here npx @53able/conflux method critical '{"claim": "この実装で十分"}'
 
 # または Google Gemini
-GOOGLE_GENERATIVE_AI_API_KEY=your-google-key npx @53able/conflux single critical '{"claim": "この実装で十分"}'
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-key npx @53able/conflux method critical '{"claim": "この実装で十分"}'
 ```
 
 ### 永続的な設定
@@ -149,7 +156,7 @@ EOF
 **Anthropic API Key**（デフォルト：claude-3-5-haiku-latest）
 - [Anthropic Console](https://console.anthropic.com/)でAPIキーを取得
 
-**Google Generative AI API Key**（デフォルト： gemini-2.5-flash）
+**Google Generative AI API Key**（デフォルト：gemini-2.5-flash）
 - [Google AI Studio](https://aistudio.google.com/app/apikey)でAPIキーを取得
 
 ### CLIでの動作確認
@@ -163,13 +170,13 @@ npx @53able/conflux recommend debugging
 
 # 3. 実際の思考分析（API KEYが必要）
 # 環境変数を設定して実行
-OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux single abduction '{"surprisingFact": "APIが遅い"}'
+OPENAI_API_KEY=sk-proj-your-key-here npx @53able/conflux method abduction '{"surprisingFact": "APIが遅い"}'
 
 # Google Geminiを使用する場合
-GOOGLE_GENERATIVE_AI_API_KEY=your-google-key npx @53able/conflux single abduction '{"surprisingFact": "APIが遅い"}'
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-key npx @53able/conflux method abduction '{"surprisingFact": "APIが遅い"}'
 
 # または永続的に設定済みの場合
-npx @53able/conflux single abduction '{"surprisingFact": "APIが遅い"}'
+npx @53able/conflux method abduction '{"surprisingFact": "APIが遅い"}'
 ```
 
 > **💡 ヒント**: 初回使用時は、まず`list`コマンドで思考法一覧を確認し、`recommend`コマンドで局面別推奨を確認してから、実際の思考分析を試してみてください。
@@ -181,50 +188,79 @@ npx @53able/conflux single abduction '{"surprisingFact": "APIが遅い"}'
 #### 局面別思考プロセス
 
 ```typescript
-import { ThinkingOrchestrator } from '@53able/conflux';
+import { processPhaseTaskEither, globalLLMManager, toLanguageModel } from '@53able/conflux';
+import { createOpenAI } from '@ai-sdk/openai';
 
-const orchestrator = new ThinkingOrchestrator();
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // デバッグ場面での思考プロセス
-const result = await orchestrator.processPhase(
+const result = await processPhaseTaskEither(
   'debugging',
   {
     issue: 'APIが500エラーを返す',
     context: 'DB接続エラーが発生している様子',
     observations: ['他のAPIは正常', 'ログにタイムアウト']
   },
-  { llmProvider: 'openai' }
-);
+  { 
+    llmProvider: toLanguageModel(globalLLMManager.getProvider()),
+    llmIntegration: globalLLMManager.getIntegration(),
+    userId: 'user123',
+    sessionId: 'debug-session-123'
+  }
+)();
 
-console.log(result.synthesis); // 統合分析結果
-console.log(result.actionItems); // 具体的なアクションアイテム
+if (result._tag === 'Right') {
+  console.log(result.right.synthesis); // 統合分析結果
+  console.log(result.right.actionItems); // 具体的なアクションアイテム
+}
 ```
 
 #### 黄金パターン（探索→実装）
 
 ```typescript
+import { processGoldenPatternTaskEither, globalLLMManager, toLanguageModel } from '@53able/conflux';
+
 // アブダクション→演繹→帰納→クリティカル→ロジカル→メタ→ディベートの統合フロー
-const result = await orchestrator.processGoldenPattern(
+const result = await processGoldenPatternTaskEither(
   {
     problem: '新機能の設計方針',
     context: 'パフォーマンスとメンテナンス性のバランス',
   },
-  { llmProvider: 'anthropic' }
-);
+  { 
+    llmProvider: toLanguageModel(globalLLMManager.getProvider()),
+    llmIntegration: globalLLMManager.getIntegration(),
+    userId: 'user123',
+    sessionId: 'golden-pattern-session-123'
+  }
+)();
 ```
 
 #### 単一思考法の使用
 
 ```typescript
+import { processSingleMethodTaskEither, globalLLMManager, toLanguageModel } from '@53able/conflux';
+import { createOpenAI } from '@ai-sdk/openai';
+
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 // クリティカルシンキングで前提を疑う
-const result = await orchestrator.processSingleMethod(
+const result = await processSingleMethodTaskEither(
   'critical',
   {
     claim: 'マイクロサービス化で開発速度向上',
     evidence: ['独立デプロイ可能', '技術選択の自由']
   },
-  { llmProvider: 'openai' }
-);
+  { 
+    llmProvider: toLanguageModel(globalLLMManager.getProvider()),
+    llmIntegration: globalLLMManager.getIntegration(),
+    userId: 'user123',
+    sessionId: 'session-123'
+  }
+)();
 ```
 
 ### 2. コマンドライン使用
@@ -237,7 +273,10 @@ npx @53able/conflux phase debugging '{"issue": "APIエラー", "context": "DB問
 npx @53able/conflux golden '{"problem": "アーキテクチャ設計"}'
 
 # 単一思考法
-npx @53able/conflux single critical '{"claim": "この実装で十分"}'
+npx @53able/conflux method critical '{"claim": "この実装で十分"}'
+
+# カスタム戦略
+npx @53able/conflux strategy '{"primary": "critical", "secondary": ["logical"], "sequence": ["critical", "logical"]}' '{"problem": "設計方針の検討"}'
 
 # 思考法一覧
 npx @53able/conflux list
@@ -246,7 +285,7 @@ npx @53able/conflux list
 npx @53able/conflux recommend debugging
 
 # バージョン確認
-npx @53able/conflux version
+npx @53able/conflux --version
 
 # ヘルプ表示
 npx @53able/conflux --help
@@ -254,7 +293,7 @@ npx @53able/conflux --help
 
 ## 🛠 MCPサーバーとして使用
 
-Model Context Protocol準拠のサーバーとして他のAIツールと統合できます。
+Model Context Protocol準拠のサーバーとして他のAIツールと統合できます。自己修復機能とフォールバック機能を搭載し、高い信頼性を提供します。
 
 ### サーバー起動
 
@@ -338,7 +377,7 @@ docker compose --env-file .env.docker up --build
 AI SDK v5でサポートされている最新のモデル一覧は、[AI SDK v5公式ドキュメント](https://ai-sdk.dev/docs/foundations/providers-and-models)で確認できます。
 
 **利用可能なプロバイダーとモデル**:
-- **OpenAI**: `gpt-5-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-chat-latest`, `gpt-4o`, `gpt-4o-mini`
+- **OpenAI**: `gpt-4o-mini`, `gpt-4o`, `gpt-5-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-chat-latest`
 - **Anthropic**: `claude-3-5-haiku-latest`, `claude-sonnet-4-latest`, `claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-latest`
 - **Google**: `gemini-2.5-flash`, `gemini-2.0-flash-exp`, `gemini-1.5-flash`, `gemini-1.5-pro`
 - **OpenAI互換**: カスタムエンドポイント（`openai-compatible`タイプ）
@@ -384,7 +423,15 @@ npx @53able/conflux list
 docker build -t conflux-mcp .
 
 # 環境変数ファイルを作成
-echo "OPENAI_API_KEY=your-key-here" > .env.docker
+cat > .env.docker << 'EOF'
+OPENAI_API_KEY=your-key-here
+ANTHROPIC_API_KEY=your-anthropic-key-here
+GOOGLE_GENERATIVE_AI_API_KEY=your-google-key-here
+DEFAULT_LLM_PROVIDER=openai
+NODE_ENV=production
+AI_SDK_DISABLE_TELEMETRY=true
+AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
+EOF
 
 # Docker Composeで起動
 docker compose --env-file .env.docker up --build
@@ -410,6 +457,12 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 - **未使用変数検出**: `@typescript-eslint/no-unused-vars`で未使用コードを排除
 - **一貫した命名**: 未使用パラメータは`_`プレフィックスで統一
 - **自動フォーマット**: 一貫したコードスタイルを維持
+
+#### 信頼性機能
+- **自己修復機能**: 入力データの自動修復とスキーマ適合
+- **フォールバック機能**: 複数LLMプロバイダー間の自動切り替え
+- **自動復旧機能**: スキーマ不一致やエラー時の自動再試行
+- **エラーハンドリング**: 包括的なエラー処理とログ記録
 
 #### 開発コマンド
 ```bash
@@ -470,39 +523,77 @@ globalLLMManager.registerProvider('custom', {
 ### カスタム思考法エージェント
 
 ```typescript
-import { BaseThinkingAgent, AgentCapability } from '@53able/conflux';
+import { 
+  type FunctionalAgent, 
+  executeFunctionalAgent, 
+  ThinkingMethodType, 
+  DevelopmentPhase 
+} from '@53able/conflux';
+import { z } from 'zod';
 
-class CustomThinkingAgent extends BaseThinkingAgent {
-  readonly capability: AgentCapability = {
-    methodType: 'custom',
+const customAgent: FunctionalAgent<CustomInput, CustomOutput> = {
+  capability: {
+    methodType: 'custom' as ThinkingMethodType,
     description: 'カスタム思考法',
-    applicablePhases: ['implementation'],
-    requiredInputSchema: z.object({ /* スキーマ定義 */ }),
-    outputSchema: z.object({ /* 出力スキーマ */ }),
-    combinationSynergies: ['critical', 'logical'],
-  };
+    applicablePhases: ['implementation'] as DevelopmentPhase[],
+    requiredInputSchema: z.object({ 
+      problem: z.string(),
+      context: z.string().optional()
+    }),
+    outputSchema: z.object({ 
+      solution: z.string(),
+      confidence: z.number().min(0).max(1)
+    }),
+    combinationSynergies: ['critical', 'logical']
+  },
+  config: {
+    temperature: 0.3,
+    maxRetries: 3,
+    enableAutoRecovery: true,
+    schemaName: 'CustomOutput',
+    schemaDescription: 'カスタム思考法の分析結果',
+    mode: 'json'
+  },
+  generatePrompts: (input, capability) => {
+    // プロンプト生成ロジック
+    return E.right({
+      system: 'カスタム思考法のシステムプロンプト',
+      user: `問題: ${input.problem}`
+    });
+  },
+  calculateConfidence: (output, context) => output.confidence,
+  generateReasoning: (input, output, context) => `カスタム分析: ${output.solution}`,
+  recommendNextSteps: (result, phase) => ['critical', 'logical']
+};
 
-  protected async executeLLMThinking(input: unknown, context: AgentContext) {
-    // カスタムロジック実装
-  }
-}
+// カスタムエージェントの実行
+const result = await executeFunctionalAgent(
+  customAgent,
+  { problem: '複雑な問題', context: '技術的制約あり' },
+  context
+)();
 ```
 
 ### 思考プロセスの連鎖
 
 ```typescript
-const orchestrator = new ThinkingOrchestrator();
+import { processPhaseTaskEither, globalLLMManager, toLanguageModel } from '@53able/conflux';
 
 // 要件定義 → 設計 → 実装の連鎖
-const requirements = await orchestrator.processPhase('requirement_definition', input);
-const architecture = await orchestrator.processPhase('architecture_design', {
-  ...input,
-  requirements: requirements.results,
-});
-const implementation = await orchestrator.processPhase('implementation', {
-  ...input,
-  architecture: architecture.results,
-});
+const requirements = await processPhaseTaskEither('requirement_definition', input, context)();
+if (requirements._tag === 'Right') {
+  const architecture = await processPhaseTaskEither('architecture_design', {
+    ...input,
+    requirements: requirements.right.results,
+  }, context)();
+  
+  if (architecture._tag === 'Right') {
+    const implementation = await processPhaseTaskEither('implementation', {
+      ...input,
+      architecture: architecture.right.results,
+    }, context)();
+  }
+}
 ```
 
 ### MCPツールの活用
@@ -511,11 +602,14 @@ MCPサーバーとして起動することで、他のAIツールと統合して
 
 #### 利用可能なMCPツール
 
-- `process-phase` - 局面に応じた統合思考プロセス
-- `process-golden-pattern` - 黄金パターンの実行
-- `process-single-method` - 単一思考法の実行  
-- `list-thinking-methods` - 思考法一覧の取得
-- `get-phase-recommendations` - 局面別推奨の取得
+| ツール名 | 説明 | 入力パラメータ |
+|---------|------|---------------|
+| `process-phase` | 局面に応じた統合思考プロセスを実行します | `phase` (開発局面), `input` (入力データ) |
+| `process-golden-pattern` | 黄金パターン（探索→実装）の統合思考プロセスを実行します | `input` (入力データ) |
+| `process-single-method` | 単一の思考法を実行します | `method` (思考法), `input` (入力データ) |
+| `process-custom-strategy` | PHASE_THINKING_MAP形式で思考法戦略を指定して実行します | `primary` (主要思考法), `secondary` (併用思考法), `sequence` (実行順序), `input` (入力データ) |
+| `list-thinking-methods` | 利用可能な思考法の一覧と詳細を取得します | なし |
+| `get-phase-recommendations` | 指定した局面に推奨される思考法を取得します | `phase` (開発局面) |
 
 #### 思考プロセスの連鎖
 
@@ -537,10 +631,8 @@ MIT License - 詳細は [LICENSE](LICENSE) ファイルを参照してくださ�
 
 ## 🙏 謝辞
 
-- [Commander.js](https://github.com/tj/commander.js) - 型安全なCLIパーサー
-- [AI SDK v5](https://sdk.vercel.ai/) - LLM統合ライブラリ
-- [Model Context Protocol](https://modelcontextprotocol.io/) - AI統合標準
 - [Anthropic](https://www.anthropic.com/engineering/building-effective-agents) - エージェント設計指針
+- [Vercel](https://vercel.com/) - AI SDK v5の開発とメンテナンス
 
 ---
 

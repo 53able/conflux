@@ -1,63 +1,31 @@
 # MCP Server Setup and Configuration
 
-This document provides instructions on how to set up and configure the MCP server for the Conflux project.
+Conflux MCP Serverのセットアップと設定方法を説明します。
 
 **パッケージ名**: @53able/conflux  
+**現在のバージョン**: 0.3.1  
 **最新バージョン**: [GitHub Releases](https://github.com/53able/conflux/releases)を参照
+
+## 概要
+
+Confluxは9つの思考法を組み合わせたマルチエージェントシステムです。MCPサーバーとして動作し、AI開発環境と統合して思考プロセスを支援します。
 
 ## Prerequisites
 
-- Docker 20.10+ and Docker Compose 2.0+ installed on your machine
 - Node.js 20+ and pnpm (for local development)
 - TypeScript 5.6+ (for development)
 
+**Dockerを使用する場合は、[Docker使用方法](docker-usage.md)を参照してください。**
+
+## 関連ドキュメント
+
+- [アーキテクチャ設計](architecture.md) - システムのアーキテクチャ概要
+- [Docker使用方法](docker-usage.md) - Dockerでの実行方法
+- [思考法の使い方](思考法の使い方.md) - 思考法の詳細説明
+
 ## Setup Methods
 
-### Method 1: Docker (Recommended for Production)
-
-#### Quick Start with Docker
-
-```bash
-# Clone the repository
-git clone https://github.com/53able/conflux.git
-cd conflux
-
-# Create environment file
-cat > .env.docker << 'EOF'
-OPENAI_API_KEY=your_openai_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
-DEFAULT_LLM_PROVIDER=openai
-NODE_ENV=production
-AI_SDK_DISABLE_TELEMETRY=true
-AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
-EOF
-
-# Build and run with Docker Compose
-docker compose --env-file .env.docker up --build
-```
-
-#### Docker Commands
-
-```bash
-# Build the Docker image
-docker build -t conflux-mcp .
-
-# Run with environment variables
-docker run -it --rm \
-  -e OPENAI_API_KEY=your_api_key \
-  -e DEFAULT_LLM_PROVIDER=openai \
-  conflux-mcp
-
-# Run in background
-docker compose --env-file .env.docker up -d --build
-```
-
-### Method 2: Local Development
-
-#### Prerequisites
-- Node.js 20+
-- pnpm
+### Method 1: Local Development
 
 #### Setup Steps
 
@@ -78,23 +46,80 @@ docker compose --env-file .env.docker up -d --build
    ```
 
 4. **Set Environment Variables**
+   
+   `.env` ファイルを作成:
    ```bash
-   # Create .env file
-   echo "OPENAI_API_KEY=your_key_here" > .env
-   echo "DEFAULT_LLM_PROVIDER=openai" >> .env
+   # .env
+   OPENAI_API_KEY=your_openai_api_key_here
+   ANTHROPIC_API_KEY=your_anthropic_api_key_here
+   GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
+   DEFAULT_LLM_PROVIDER=openai
+   LOG_LEVEL=debug
+   NODE_ENV=development
+   AI_SDK_DISABLE_TELEMETRY=true
+   AI_SDK_VERCEL_AI_GATEWAY_DISABLED=true
    ```
+   
+   **注意**: 最低1つのAPIキーは必須です。複数のプロバイダーを設定することで、フォールバック機能が利用できます。
 
 5. **Run the MCP Server**
    ```bash
-   # Using npm script
+   # Using built version (推奨)
+   node dist/mcp/server.js
+   
+   # Or using npm script
    pnpm run mcp-server
    
-   # Or using tsx directly
+   # Or using tsx directly (開発時)
    npx tsx src/mcp/server.ts
-   
-   # Or using npx (if published)
-   npx @53able/conflux server
    ```
+
+6. **Verify Installation**
+   ```bash
+   # ヘルスチェック
+   curl -X POST http://localhost:3000/health
+   
+   # ログを確認
+   tail -f logs/mcp-server.log
+   ```
+
+### 開発用便利コマンド
+
+```bash
+# ビルドしてMCPサーバー起動
+pnpm run build && node dist/mcp/server.js
+
+# 開発サーバー起動（ホットリロード）
+pnpm run dev
+
+# MCPサーバー起動（tsx使用）
+pnpm run mcp-server
+
+# 型チェック
+pnpm run type-check
+
+# リント
+pnpm run lint
+
+# テスト実行
+pnpm run test
+
+# ビルド
+pnpm run build
+
+# クリーンアップ
+pnpm run clean
+```
+
+### Method 2: NPM Package (Recommended for Production Use)
+
+```bash
+# Install globally
+npm install -g @53able/conflux
+
+# Or use npx (no installation required)
+npx @53able/conflux server
+```
 
 ## MCP Server Configuration
 
@@ -110,22 +135,132 @@ docker compose --env-file .env.docker up -d --build
 | `AI_SDK_DISABLE_TELEMETRY` | Disable telemetry | Recommended | `true` |
 | `AI_SDK_VERCEL_AI_GATEWAY_DISABLED` | Disable Vercel AI Gateway | Recommended | `true` |
 | `LOG_LEVEL` | Log level | Optional | `info` |
+| `OPENAI_MODEL` | OpenAI model name | Optional | `gpt-5-nano` |
+| `ANTHROPIC_MODEL` | Anthropic model name | Optional | `claude-3-5-haiku-latest` |
+| `GOOGLE_MODEL` | Google model name | Optional | `gemini-2.5-flash` |
 
 ### MCP Server Features
 
 - **stdio通信**: MCPサーバーはstdioベースで動作（ポート不要）
 - **自動復旧**: LLMレスポンスのスキーマ不一致時の自動修正
+- **自己修復機能**: 入力データの自動修復とバリデーション
 - **ログ機能**: Winstonによる構造化ログ出力
 - **エラーハンドリング**: 包括的なエラー処理とログ記録
 - **AI SDK v5統合**: 最新のAI SDKとの完全統合
 - **型安全性**: TypeScript + Zodスキーマによる完全な型安全性
+- **関数型アーキテクチャ**: fp-tsを使用した関数型プログラミング
+- **複数LLMプロバイダー対応**: OpenAI、Anthropic、Google、OpenAI互換、Mock
+
+## 利用可能なツール
+
+このMCPサーバーは、9つの思考法エージェントを統合した思考プロセスを提供します。
+
+### 1. process-phase
+局面に応じた統合思考プロセスを実行します。
+
+**パラメータ:**
+- `phase`: 開発の局面（business_exploration, requirement_definition, など）
+- `input`: 分析対象の入力データ
+- `llmProvider`: LLMプロバイダー設定（オプション）
+- `userId`: ユーザーID（オプション）
+
+**例:**
+```json
+{
+  "phase": "requirement_definition",
+  "input": {
+    "problem": "ユーザー認証システムの要件を定義したい",
+    "context": "Webアプリケーションの開発"
+  }
+}
+```
+
+### 2. process-golden-pattern
+黄金パターン（探索→実装）の統合思考プロセスを実行します。
+
+**パラメータ:**
+- `input`: 分析対象の入力データ
+- `llmProvider`: LLMプロバイダー設定（オプション）
+- `userId`: ユーザーID（オプション）
+
+**黄金パターンのシーケンス:**
+1. abduction（仮説を立てる）
+2. deductive（帰結を設計）
+3. inductive（データ検証）
+4. critical（前提/飛躍を潰す）
+5. mece（漏れなく重複なく構造化）
+6. logical（論理的道筋を構築）
+7. meta（プロセス自体を更新）
+8. debate（必要なら意思決定を締める）
+
+### 3. process-single-method
+単一の思考法を実行します。
+
+**パラメータ:**
+- `method`: 実行する思考法（abduction, logical, deductive, など）
+- `input`: 思考法への入力データ
+- `llmProvider`: LLMプロバイダー設定（オプション）
+- `userId`: ユーザーID（オプション）
+
+### 4. list-thinking-methods
+利用可能な思考法の一覧と詳細を取得します。
+
+### 5. get-phase-recommendations
+指定した局面に推奨される思考法を取得します。
+
+**パラメータ:**
+- `phase`: 開発の局面
+
+### 6. process-custom-strategy
+PHASE_THINKING_MAP形式で思考法戦略を指定して実行します。
+
+**パラメータ:**
+- `primary`: 主要思考法
+- `secondary`: 併用思考法の配列
+- `sequence`: 実行する思考法の順序
+- `input`: 分析対象の入力データ
+- `llmProvider`: LLMプロバイダー設定（オプション）
+- `userId`: ユーザーID（オプション）
+
+## 思考法の種類
+
+1. **abduction** - 驚きの事実から説明仮説を形成
+2. **logical** - 論点から結論への論理的道筋を構築
+3. **critical** - 前提・論点・根拠を体系的に疑い
+4. **mece** - 項目を漏れなく重複なく分類
+5. **deductive** - 一般的な原則から具体的な結論を導出
+6. **inductive** - 個別事例から共通パターンを発見
+7. **pac** - 仮説を前提・仮定・結論に分解
+8. **meta** - 思考プロセス自体を対象化
+9. **debate** - 論題に対する賛成・反対の論点を検討
 
 ## Integration with AI Tools
 
-### Cursor Configuration
+### MCPクライアント設定
 
-Add to your `mcp.json`:
+#### ローカル開発用設定
 
+**Cursor設定例** (`mcp.json`):
+```json
+{
+  "mcp.servers": {
+    "thinking-agents": {
+      "command": "node",
+      "args": ["/path/to/your/conflux/dist/mcp/server.js"],
+      "env": {
+        "OPENAI_API_KEY": "your_openai_api_key_here",
+        "ANTHROPIC_API_KEY": "your_anthropic_api_key_here",
+        "GOOGLE_GENERATIVE_AI_API_KEY": "your_google_api_key_here",
+        "DEFAULT_LLM_PROVIDER": "openai",
+        "LOG_LEVEL": "debug",
+        "NODE_ENV": "development"
+      }
+    }
+  }
+}
+```
+
+**本番用設定** (`mcp.json`):
 ```json
 {
   "mcp.servers": {
@@ -134,17 +269,19 @@ Add to your `mcp.json`:
       "args": ["@53able/conflux", "server"],
       "env": {
         "OPENAI_API_KEY": "your_openai_api_key_here",
-        "DEFAULT_LLM_PROVIDER": "openai"
+        "ANTHROPIC_API_KEY": "your_anthropic_api_key_here",
+        "GOOGLE_GENERATIVE_AI_API_KEY": "your_google_api_key_here",
+        "DEFAULT_LLM_PROVIDER": "openai",
+        "LOG_LEVEL": "info"
       }
     }
   }
 }
 ```
 
-### Claude Desktop Configuration
+#### Claude Desktop設定例
 
-Add to your `claude_desktop_config.json`:
-
+`claude_desktop_config.json` に追加:
 ```json
 {
   "mcpServers": {
@@ -153,12 +290,19 @@ Add to your `claude_desktop_config.json`:
       "args": ["@53able/conflux", "server"],
       "env": {
         "OPENAI_API_KEY": "your_openai_api_key_here",
-        "DEFAULT_LLM_PROVIDER": "openai"
+        "ANTHROPIC_API_KEY": "your_anthropic_api_key_here",
+        "GOOGLE_GENERATIVE_AI_API_KEY": "your_google_api_key_here",
+        "DEFAULT_LLM_PROVIDER": "openai",
+        "LOG_LEVEL": "info"
       }
     }
   }
 }
 ```
+
+#### その他のMCPクライアント
+
+標準的なMCPプロトコルに準拠しているため、任意のMCPクライアントで使用可能です。
 
 ## Troubleshooting
 
@@ -189,6 +333,39 @@ Add to your `claude_desktop_config.json`:
    
    # Check Dockerfile syntax
    docker build -t conflux-mcp . --no-cache
+   ```
+
+4. **"No tools or prompts" エラー**
+   - プロジェクトが正しくビルドされているか確認: `pnpm run build`
+   - MCPサーバーが正常に起動しているか確認: `node dist/mcp/server.js`
+   - 環境変数（LLM APIキーなど）が設定されているか確認
+   - fp-tsのインポートパスが正しいか確認（ES modules対応）
+
+5. **fp-ts関連エラー**
+   ```bash
+   # プロジェクトを再ビルド
+   pnpm run build
+   
+   # 依存関係を再インストール
+   rm -rf node_modules pnpm-lock.yaml
+   pnpm install
+   pnpm run build
+   ```
+
+6. **自己修復機能の確認**
+   - 入力データの形式が正しくない場合、自動的に修復を試行します
+   - ログで「Self-healing mechanism activated」メッセージを確認
+   - 修復に失敗した場合は、入力データの形式を確認してください
+
+7. **LLMプロバイダー関連エラー**
+   ```bash
+   # 利用可能なプロバイダーを確認
+   echo $OPENAI_API_KEY
+   echo $ANTHROPIC_API_KEY
+   echo $GOOGLE_GENERATIVE_AI_API_KEY
+   
+   # デフォルトプロバイダーを明示的に設定
+   export DEFAULT_LLM_PROVIDER=openai
    ```
 
 ### Logs and Debugging
@@ -248,7 +425,29 @@ services:
     command: ["pnpm", "run", "mcp-server"]
     environment:
       - NODE_ENV=development
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-openai}
 ```
 
 Run with: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up`
+
+### CLI コマンド
+
+MCPサーバー以外にも、CLIコマンドが利用できます：
+
+```bash
+# 思考法一覧を表示
+npx @53able/conflux list
+
+# 局面別推奨思考法を表示
+npx @53able/conflux recommend requirement_definition
+
+# 単一思考法を実行
+npx @53able/conflux method logical '{"question": "プロジェクトの優先順位を決めたい"}'
+
+# 局面別思考プロセスを実行
+npx @53able/conflux phase requirement_definition '{"problem": "ユーザー認証システムの要件を定義したい"}'
+```
 
