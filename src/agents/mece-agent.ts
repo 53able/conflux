@@ -12,7 +12,7 @@ import {
   DevelopmentPhase, 
 } from '../schemas/index.js';
 import * as E from 'fp-ts/lib/Either.js';
-import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { extractSchemaRequirements } from '../core/schema-utils.js';
 import { type MECEInput, type MECEOutput, MECEInputSchema, MECEOutputSchema  } from '../schemas/index.js';
 
 /**
@@ -63,9 +63,8 @@ const meceConfig: AgentConfig = {
 
 // プロンプト生成関数
 const generateMECEPrompts: PromptGenerator<MECEInput> = (input, capability) => {
-  // スキーマから動的にJSON例と注意事項を生成
-  const schemaExample = generateSchemaExample(capability.outputSchema);
-  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
+  // スキーマから統合された要件を生成
+  const schemaRequirements = extractSchemaRequirements(capability.outputSchema);
 
   const systemPrompt = `あなたはMECE思考の専門家です。情報を漏れなく重複なく分類・整理してください。
 
@@ -77,10 +76,7 @@ MECE思考の手順:
 
 重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-${schemaExample}
-
-注意事項:
-${schemaInstructions}
+${schemaRequirements}
 
 MECE思考の本質である「Mutually Exclusive, Collectively Exhaustive」を重視し、体系的で完全な分類を行ってください。`;
 

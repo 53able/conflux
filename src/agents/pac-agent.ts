@@ -12,7 +12,7 @@ import {
   DevelopmentPhase, 
 } from '../schemas/index.js';
 import * as E from 'fp-ts/lib/Either.js';
-import { generateSchemaExample, generateSchemaInstructions } from '../core/llm-integration.js';
+import { extractSchemaRequirements } from '../core/schema-utils.js';
 import { type PACInput, type PACOutput, PACInputSchema, PACOutputSchema } from '../schemas/index.js';
 
 /**
@@ -58,9 +58,8 @@ const pacConfig: AgentConfig = {
 
 // プロンプト生成関数
 const generatePACPrompts: PromptGenerator<PACInput> = (input, capability) => {
-  // スキーマから動的にJSON例と注意事項を生成
-  const schemaExample = generateSchemaExample(capability.outputSchema);
-  const schemaInstructions = generateSchemaInstructions(capability.outputSchema);
+  // スキーマから統合された要件を生成
+  const schemaRequirements = extractSchemaRequirements(capability.outputSchema);
 
   const systemPrompt = `あなたはPAC思考の専門家です。仮説を前提・仮定・結論に分解し、検証可能な方法を提示してください。
 
@@ -73,10 +72,7 @@ PAC思考の手順:
 
 重要: 以下のJSON形式で厳密に出力してください。他のテキストは含めず、JSONのみを出力してください。
 
-${schemaExample}
-
-注意事項:
-${schemaInstructions}
+${schemaRequirements}
 
 PAC思考の本質である「前提・仮定・結論」の明確な分離と検証可能性を重視してください。`;
 
