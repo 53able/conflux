@@ -62,17 +62,17 @@ export const ThinkingProcessStatusSchema = z.enum([
  * 基本入力フィールドのスキーマ
  */
 export const BaseInputFieldsSchema = z.object({
-  context: z.string().optional(),
-  domain: z.string().optional(),
+  context: z.string().optional().describe('思考のコンテキスト'),
+  domain: z.string().optional().describe('思考のドメイン'),
 });
 
 /**
  * 基本出力フィールドのスキーマ
  */
 export const BaseOutputFieldsSchema = z.object({
-  confidence: z.number().min(0).max(1),
-  reasoning: z.string(),
-  status: ThinkingProcessStatusSchema.optional(),
+  confidence: z.number().min(0).max(1).describe('思考の確信度'),
+  reasoning: z.string().describe('思考の理由'),
+  status: ThinkingProcessStatusSchema.optional().default('completed'),
 });
 
 // ============================================================================

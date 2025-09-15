@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod';
+import { BaseInputFieldsSchema } from './base.js';
 
 // ============================================================================
 // 各思考法の入力スキーマ
@@ -11,59 +12,47 @@ import { z } from 'zod';
 /**
  * アブダクション思考の入力スキーマ
  */
-export const AbductionInputSchema = z.object({
-  surprisingFact: z.string().min(1, '驚きの事実は必須です'),
-  context: z.string().optional(),
-  domain: z.string().optional()
+export const AbductionInputSchema = BaseInputFieldsSchema.extend({
+  surprisingFact: z.string().min(1, '驚きの事実は必須です').describe('驚きの事実')
 }).describe('アブダクション思考の入力スキーマ');
 
 /**
  * 批判的思考の入力スキーマ
  */
-export const CriticalInputSchema = z.object({
-  claim: z.string().min(1, '主張は必須です'),
-  evidence: z.array(z.string()).optional(),
-  context: z.string().optional(),
-  domain: z.string().optional()
+export const CriticalInputSchema = BaseInputFieldsSchema.extend({
+  claim: z.string().min(1, '主張は必須です').describe('主張'),
+  evidence: z.array(z.string()).optional().describe('証拠')
 }).describe('批判的思考の入力スキーマ');
 
 /**
  * ディベート思考の入力スキーマ
  */
-export const DebateInputSchema = z.object({
-  topic: z.string().min(1, 'トピックは必須です'),
-  positions: z.array(z.string()).optional(),
-  context: z.string().optional(),
-  domain: z.string().optional()
+export const DebateInputSchema = BaseInputFieldsSchema.extend({
+  topic: z.string().min(1, 'トピックは必須です').describe('トピック'),
+  positions: z.array(z.string()).optional().describe('立場')
 }).describe('ディベート思考の入力スキーマ');
 
 /**
  * 演繹的思考の入力スキーマ
  */
-export const DeductiveInputSchema = z.object({
+export const DeductiveInputSchema = BaseInputFieldsSchema.extend({
   majorPremise: z.string().min(1, '大前提は必須です'),
-  minorPremise: z.string().min(1, '小前提は必須です'),
-  context: z.string().optional(),
-  domain: z.string().optional()
+  minorPremise: z.string().min(1, '小前提は必須です')
 }).describe('演繹的思考の入力スキーマ');
 
 /**
  * 帰納的思考の入力スキーマ
  */
-export const InductiveInputSchema = z.object({
-  observations: z.array(z.string()).min(1, '観察データは1つ以上必要です'),
-  context: z.string().optional(),
-  domain: z.string().optional()
+export const InductiveInputSchema = BaseInputFieldsSchema.extend({
+  observations: z.array(z.string()).min(1, '観察データは1つ以上必要です')
 }).describe('帰納的思考の入力スキーマ');
 
 /**
  * ロジカルシンキングの入力スキーマ
  */
-export const LogicalInputSchema = z.object({
+export const LogicalInputSchema = BaseInputFieldsSchema.extend({
   question: z.string().min(1, '質問は必須です'),
-  context: z.string().optional(),
-  constraints: z.array(z.string()).optional(),
-  domain: z.string().optional()
+  constraints: z.array(z.string()).optional()
 }).describe('ロジカルシンキングの入力スキーマ');
 
 /**
@@ -78,19 +67,16 @@ export const MECEInputSchema = z.object({
 /**
  * メタ思考の入力スキーマ
  */
-export const MetaInputSchema = z.object({
+export const MetaInputSchema = BaseInputFieldsSchema.extend({
   currentThinking: z.string().min(1, '現在の思考内容は必須です'),
-  objective: z.string().min(1, '目標は必須です'),
-  context: z.string().optional()
+  objective: z.string().min(1, '目標は必須です')
 }).describe('メタ思考の入力スキーマ');
 
 /**
  * PAC思考の入力スキーマ
  */
-export const PACInputSchema = z.object({
-  claim: z.string().min(1, '主張は必須です'),
-  context: z.string().optional(),
-  domain: z.string().optional()
+export const PACInputSchema = BaseInputFieldsSchema.extend({
+  claim: z.string().min(1, '主張は必須です')
 }).describe('PAC思考の入力スキーマ');
 
 // ============================================================================
